@@ -635,8 +635,8 @@ export default function ProperNewsOverlay({ story, enabled, timelinePosition }: 
 
   return (
     <ModalStackProvider>
-      {/* Flow Lines - Professional styling - Only render if this is the controlling instance */}
-      {(globalPipelineInstanceId === instanceId) && flowLines.map((flow, index) => (
+      {/* Flow Lines - COMPLETELY DISABLED FOR DEBUGGING - ALL PIPELINE RENDERING OFF */}
+      {/* {(globalPipelineInstanceId === instanceId) && flowLines.map((flow, index) => (
         <Polyline
           key={`flow-${index}`}
           positions={flow.coordinates}
@@ -661,7 +661,16 @@ export default function ProperNewsOverlay({ story, enabled, timelinePosition }: 
             </div>
           </Popup>
         </Polyline>
-      ))}
+      ))} */}
+      
+      {/* DEBUG: Log what's happening */}
+      {console.log('ProperNewsOverlay DEBUG:', {
+        instanceId,
+        enabled,
+        flowLinesCount: flowLines.length,
+        globalPipelineInstanceId,
+        storyId: story?.id
+      })}
 
       {/* POI Markers with draggable modals */}
       {poiMarkers.map((marker) => (
@@ -672,12 +681,12 @@ export default function ProperNewsOverlay({ story, enabled, timelinePosition }: 
           />
       ))}
 
-      {/* Enhanced News Story Visualization (Frontlines, Area Control, etc.) */}
-      <NewsStoryOverlay
+      {/* Enhanced News Story Visualization - DISABLED FOR DEBUGGING */}
+      {/* <NewsStoryOverlay
         story={story}
         enabled={enabled}
         timelinePosition={timelinePosition}
-      />
+      /> */}
     </ModalStackProvider>
   );
 }
