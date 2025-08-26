@@ -1,5 +1,6 @@
 import dynamic from 'next/dynamic';
 import { ComponentProps } from 'react';
+import MapErrorBoundary from '@/components/MapErrorBoundary';
 
 const MapContainer = dynamic(
   () => import('./MapContainer'),
@@ -16,5 +17,9 @@ const MapContainer = dynamic(
 export type DynamicMapProps = ComponentProps<typeof MapContainer>;
 
 export default function DynamicMap(props: DynamicMapProps) {
-  return <MapContainer {...props} />;
+  return (
+    <MapErrorBoundary>
+      <MapContainer {...props} />
+    </MapErrorBoundary>
+  );
 }

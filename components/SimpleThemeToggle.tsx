@@ -3,6 +3,7 @@
 import { Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
+import { logger } from '@/lib/logger';
 
 interface SimpleThemeToggleProps {
   onThemeChange?: (isDark: boolean) => void;
@@ -36,7 +37,7 @@ export default function SimpleThemeToggle({ onThemeChange }: SimpleThemeTogglePr
     applyTheme(newIsDark);
     localStorage.setItem('theme', newIsDark ? 'dark' : 'light');
     onThemeChange?.(newIsDark);
-    console.log('Theme toggled to:', newIsDark ? 'dark' : 'light');
+    logger.mapEvent('theme_toggle', { theme: newIsDark ? 'dark' : 'light' });
   };
 
   return (

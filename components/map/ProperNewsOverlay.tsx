@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Polyline, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
+import { Polyline, Popup, useMap } from 'react-leaflet';
+import ProfessionalMarker from './ProfessionalMarker';
 import { 
   Factory, 
   Zap, 
@@ -17,9 +17,9 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { WikipediaAPI, WIKIPEDIA_TOPICS } from '@/lib/wikipedia';
-import ProfessionalPopup from './ProfessionalPopup';
 import FlowLineInfo from './FlowLineInfo';
 import { ModalStackProvider } from './ModalStack';
+import NewsStoryOverlay from './NewsStoryOverlay';
 
 interface NewsStory {
   id: string;
@@ -54,36 +54,97 @@ interface ProperNewsOverlayProps {
   timelinePosition: number;
 }
 
+// Enhanced global state management to prevent duplicate pipelines
+let globalPipelineInstanceId: string | null = null;
+let globalPipelineRendered: boolean = false;
+let mountedInstances: Set<string> = new Set();
+
 export default function ProperNewsOverlay({ story, enabled, timelinePosition }: ProperNewsOverlayProps) {
   const [poiMarkers, setPOIMarkers] = useState<POIMarker[]>([]);
   const [flowLines, setFlowLines] = useState<any[]>([]);
   const [wikipediaData, setWikipediaData] = useState<{[key: string]: any}>({});
+  const [instanceId] = useState(() => Math.random().toString(36).substr(2, 9));
   const map = useMap();
 
+  // Component mount/unmount tracking
   useEffect(() => {
-    if (!enabled || !story) return;
+    mountedInstances.add(instanceId);
+    console.log(`Instance ${instanceId}: Mounted. Total instances: ${mountedInstances.size}`);
+    
+    return () => {
+      mountedInstances.delete(instanceId);
+      if (globalPipelineInstanceId === instanceId) {
+        globalPipelineInstanceId = null;
+        globalPipelineRendered = false;
+        console.log(`Instance ${instanceId}: Released pipeline control on unmount`);
+      }
+      console.log(`Instance ${instanceId}: Unmounted. Remaining instances: ${mountedInstances.size}`);
+    };
+  }, [instanceId]);
 
-    let poisData: POIMarker[] = [];
-
-    if (story.id === 'nord-stream' || story.content.toLowerCase().includes('nord stream')) {
-      poisData = generateNordStreamPOIs();
-      fetchWikipediaData('nord-stream');
-    } else if (story.id === 'svb-collapse' || story.content.toLowerCase().includes('silicon valley bank')) {
-      poisData = generateSVBPOIs();
-      fetchWikipediaData('svb-collapse');
-    } else if (story.id === 'ukraine-conflict' || story.content.toLowerCase().includes('ukraine')) {
-      poisData = generateUkrainePOIs();
-      fetchWikipediaData('ukraine-conflict');
+  useEffect(() => {
+    if (!enabled || !story) {
+      setFlowLines([]); // Clear lines when disabled
+      return;
     }
 
-    // Auto-zoom to fit all POIs with padding
-    if (poisData.length > 0) {
-      const bounds = L.latLngBounds(poisData.map(poi => poi.position));
-      map.fitBounds(bounds, { 
-        padding: [50, 50], // Add padding around the bounds
-        maxZoom: 10 // Don't zoom in too close
-      });
+    // If pipeline already rendered, skip entirely
+    if (globalPipelineRendered && globalPipelineInstanceId !== instanceId) {
+      console.log(`Instance ${instanceId}: Pipeline already rendered by another instance, skipping`);
+      return;
     }
+
+    // Only allow first instance to render pipelines
+    if (!globalPipelineInstanceId) {
+      globalPipelineInstanceId = instanceId;
+      console.log(`Instance ${instanceId}: First instance, taking control of pipeline rendering`);
+    } else if (globalPipelineInstanceId !== instanceId) {
+      console.log(`Instance ${instanceId}: Another instance ${globalPipelineInstanceId} is active, skipping`);
+      return;
+    }
+
+    const loadStoryData = async () => {
+      let poisData: POIMarker[] = [];
+
+      // Clear any existing flow lines first to prevent duplicates
+      setFlowLines([]);
+      console.log(`Instance ${instanceId}: Cleared existing flow lines`);
+
+      if (story.id === 'nord-stream' || story.content.toLowerCase().includes('nord stream')) {
+        poisData = await generateNordStreamPOIs();
+        fetchWikipediaData('nord-stream');
+      } else if (story.id === 'svb-collapse' || story.content.toLowerCase().includes('silicon valley bank')) {
+        poisData = generateSVBPOIs();
+        fetchWikipediaData('svb-collapse');
+      } else if (story.id === 'ukraine-conflict' || story.content.toLowerCase().includes('ukraine')) {
+        poisData = generateUkrainePOIs();
+        fetchWikipediaData('ukraine-conflict');
+      }
+
+      // Auto-zoom to fit all POIs with padding
+      if (poisData.length > 0) {
+        const bounds = L.latLngBounds(poisData.map(poi => poi.position));
+        map.fitBounds(bounds, { 
+          padding: [50, 50], // Add padding around the bounds
+          maxZoom: 10 // Don't zoom in too close
+        });
+      }
+    };
+
+    loadStoryData().catch(error => {
+      console.error(`Instance ${componentId}: Error loading story data:`, error);
+    });
+
+    // Cleanup function to remove this instance's flow lines
+    return () => {
+      if (globalPipelineInstanceId === instanceId) {
+        console.log(`Instance ${instanceId}: Cleaning up and releasing control...`);
+        globalPipelineInstanceId = null;
+        setFlowLines([]);
+      } else {
+        console.log(`Instance ${instanceId}: Cleaning up (was not controlling)...`);
+      }
+    };
   }, [story, enabled, timelinePosition, map]);
 
   const fetchWikipediaData = async (storyType: keyof typeof WIKIPEDIA_TOPICS) => {
@@ -109,7 +170,7 @@ export default function ProperNewsOverlay({ story, enabled, timelinePosition }: 
     setWikipediaData(wikiData);
   };
 
-  const generateNordStreamPOIs = (): POIMarker[] => {
+  const generateNordStreamPOIs = async (): Promise<POIMarker[]> => {
     const poisData: POIMarker[] = [
       // Explosion Sites - HIGH PRIORITY
       {
@@ -245,39 +306,96 @@ export default function ProperNewsOverlay({ story, enabled, timelinePosition }: 
       }
     ];
 
-    // ONLY show operational pipeline route - no random alternative routes
-    const actualPipelineRoute = [
-      [60.1699, 27.7172], // Vyborg start
-      [59.8944, 26.7811], // Gulf of Finland
-      [59.3293, 24.7136], // Estonian EEZ
-      [58.5953, 23.3379], // Latvian EEZ
-      [57.7089, 21.1619], // Lithuanian EEZ
-      [56.9496, 19.9456], // Polish EEZ
-      [56.1612, 18.6435], // Gotland vicinity
-      [55.6050, 17.7253], // Swedish EEZ
-      [55.4400, 15.6000], // Explosion area
-      [54.9167, 14.1167], // German EEZ
-      [54.0776, 13.0878]  // Greifswald end
-    ];
+    // Fetch real pipeline coordinates from OpenStreetMap
+    console.log('ProperNewsOverlay: Fetching real Nord Stream coordinates...');
+    
+    const { fetchNordStreamCoordinates } = await import('@/lib/pipelineData');
+    const pipelineCoords = await fetchNordStreamCoordinates();
+    
+    console.log('ProperNewsOverlay: OpenStreetMap data received:', {
+      ns1Points: pipelineCoords.ns1.length,
+      ns2Points: pipelineCoords.ns2.length
+    });
+    
+    // Use only Nord Stream 1 coordinates for a single clean pipeline visualization
+    const actualPipelineRoute = pipelineCoords.ns1.length > 0 
+      ? pipelineCoords.ns1.map(coord => [coord.lat, coord.lng])
+      : []; // Empty array if no OSM data - prevents rendering incorrect routes
+    
+    console.log('Rendering single pipeline with', actualPipelineRoute.length, 'coordinate points');
+    
+    if (actualPipelineRoute.length > 0) {
+      console.log('Pipeline route start:', actualPipelineRoute[0]);
+      console.log('Pipeline route end:', actualPipelineRoute[actualPipelineRoute.length - 1]);
+    }
 
     setPOIMarkers(poisData);
-    setFlowLines([
-      {
-        id: 'ns1-pipeline',
+    
+    // Only render pipeline if we have real OSM coordinates
+    const flowLinesToRender = [];
+    if (actualPipelineRoute.length > 0) {
+      const uniqueId = `ns1-pipeline-${Date.now()}`;
+      console.log(`Creating flow line with unique ID: ${uniqueId}`);
+      
+      flowLinesToRender.push({
+        id: uniqueId,
         coordinates: actualPipelineRoute,
-        name: 'Nord Stream 1',
+        name: 'Nord Stream 1 (OSM)',
         specifications: {
           capacity: '55 billion m³/year',
           diameter: '1,153 mm (48 inches)',
           length: '1,224 km',
           cost: '€7.4 billion',
-          operational: '2011-2022'
+          operational: '2011-2022',
+          dataSource: 'OpenStreetMap Relation 2006544'
         },
         status: timelinePosition > 50 ? 'destroyed' : 'operational',
-        color: timelinePosition > 50 ? '#FF4444' : '#2E86AB'
+        color: '#00FF00' // Bright green to distinguish our line
+      });
+    }
+    
+    // Re-enable flow lines but add validation to catch incorrect ones
+    console.log('Flow lines to render:', flowLinesToRender.length);
+    
+    // Validate each flow line before rendering
+    const validatedFlowLines = flowLinesToRender.filter((flow, index) => {
+      const firstPoint = flow.coordinates[0];
+      const lastPoint = flow.coordinates[flow.coordinates.length - 1];
+      
+      console.log(`Flow line ${index}:`, {
+        id: flow.id,
+        coordinateCount: flow.coordinates.length,
+        firstPoint: firstPoint,
+        lastPoint: lastPoint
+      });
+      
+      // Check if this looks like the straight Russia-Germany line
+      if (firstPoint && lastPoint) {
+        const isVyborgToGreifswald = 
+          (Math.abs(firstPoint[0] - 60.1699) < 0.1 && Math.abs(firstPoint[1] - 27.7172) < 0.1) ||
+          (Math.abs(lastPoint[0] - 54.0776) < 0.1 && Math.abs(lastPoint[1] - 13.0878) < 0.1);
+          
+        if (isVyborgToGreifswald && flow.coordinates.length < 50) {
+          console.warn(`REMOVING: Flow line ${flow.id} appears to be the straight Vyborg-Greifswald line`);
+          return false; // Remove the straight line
+        }
       }
-      // NS2 ran parallel but was never operational - don't show to avoid confusion
-    ]);
+      
+      // Check if this is a suspicious straight line (too few coordinates)
+      if (flow.coordinates.length < 10) {
+        console.warn(`SUSPICIOUS: Flow line ${flow.id} has only ${flow.coordinates.length} coordinates - might be a straight line`);
+        return false; // Filter out suspicious straight lines
+      }
+      
+      return true;
+    });
+    
+    console.log(`Rendering ${validatedFlowLines.length} validated flow lines`);
+    setFlowLines(validatedFlowLines);
+    
+    // Mark pipeline as successfully rendered
+    globalPipelineRendered = true;
+    console.log(`Instance ${instanceId}: Pipeline successfully rendered and marked as complete`);
 
     setPOIMarkers(poisData);
     return poisData;
@@ -513,75 +631,12 @@ export default function ProperNewsOverlay({ story, enabled, timelinePosition }: 
     return poisData;
   };
 
-  const createPOIIcon = (marker: POIMarker) => {
-    const iconMap = {
-      explosion: '💥',
-      facility: '🏭', 
-      economic: '💰',
-      military: '🛡️',
-      infrastructure: '⚡',
-      bank: '🏛️',
-      tech: '💻',
-      shield: '🛡️',
-      target: '🎯',
-      nuclear: '☢️'
-    };
-
-    // Enhanced colors for better visibility in dark mode
-    const enhancedColor = marker.color === '#FF0000' ? '#FF4444' : 
-                          marker.color === '#4A90E2' ? '#60A5FA' :
-                          marker.color === '#F39C12' ? '#FBBF24' :
-                          marker.color === '#3498DB' ? '#3B82F6' :
-                          marker.color === '#2E86AB' ? '#0EA5E9' :
-                          marker.color === '#E74C3C' ? '#EF4444' :
-                          marker.color === '#2ECC71' ? '#10B981' : marker.color;
-
-    const size = marker.priority >= 9 ? 44 : marker.priority >= 7 ? 38 : 32;
-    const pulseClass = marker.priority >= 9 ? 'priority-high' : '';
-
-    return L.divIcon({
-      html: `
-        <div class="poi-marker ${pulseClass}" style="
-          background: linear-gradient(135deg, ${enhancedColor}, ${enhancedColor}dd); 
-          border: 3px solid rgba(255,255,255,0.9);
-          border-radius: 50%;
-          width: ${size}px;
-          height: ${size}px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: ${size * 0.4}px;
-          box-shadow: 
-            0 8px 25px rgba(0,0,0,0.3),
-            0 3px 8px rgba(0,0,0,0.2),
-            inset 0 1px 0 rgba(255,255,255,0.3);
-          cursor: pointer;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-          backdrop-filter: blur(12px);
-          position: relative;
-          z-index: 1000;
-        ">
-          <div style="
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
-            position: relative;
-            z-index: 1001;
-          ">
-            ${iconMap[marker.icon as keyof typeof iconMap] || '📍'}
-          </div>
-        </div>
-      `,
-      className: 'poi-marker',
-      iconSize: [size, size],
-      iconAnchor: [size/2, size/2]
-    });
-  };
-
   if (!enabled) return null;
 
   return (
     <ModalStackProvider>
-      {/* Flow Lines - Professional styling */}
-      {flowLines.map((flow, index) => (
+      {/* Flow Lines - Professional styling - Only render if this is the controlling instance */}
+      {(globalPipelineInstanceId === instanceId) && flowLines.map((flow, index) => (
         <Polyline
           key={`flow-${index}`}
           positions={flow.coordinates}
@@ -608,19 +663,21 @@ export default function ProperNewsOverlay({ story, enabled, timelinePosition }: 
         </Polyline>
       ))}
 
-      {/* POI Markers with professional popups */}
+      {/* POI Markers with draggable modals */}
       {poiMarkers.map((marker) => (
-        <Marker
-          key={marker.id}
-          position={marker.position}
-          icon={createPOIIcon(marker)}
-        >
-          <ProfessionalPopup 
-            poi={marker} 
+          <ProfessionalMarker
+            key={marker.id}
+            poi={marker}
             wikipediaData={wikipediaData}
           />
-        </Marker>
       ))}
+
+      {/* Enhanced News Story Visualization (Frontlines, Area Control, etc.) */}
+      <NewsStoryOverlay
+        story={story}
+        enabled={enabled}
+        timelinePosition={timelinePosition}
+      />
     </ModalStackProvider>
   );
 }

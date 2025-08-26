@@ -2,6 +2,7 @@
 
 import { TileLayer } from 'react-leaflet';
 import { useEffect } from 'react';
+import { logger } from '@/lib/logger';
 
 interface LayerState {
   roads: boolean;
@@ -30,7 +31,7 @@ export default function FilterableOSMTiles({ layers, isDarkTheme = false, tileLa
     const enabledLayers = Object.values(layers).filter(Boolean).length;
     const totalLayers = Object.keys(layers).length;
     
-    console.log(`Layers enabled: ${enabledLayers}/${totalLayers}`, layers);
+    logger.debug(`Layers enabled: ${enabledLayers}/${totalLayers}`, layers);
     
     // Always use free OpenStreetMap servers to avoid rate limits
     // Apply filtering through CSS instead of switching servers
@@ -90,8 +91,8 @@ export default function FilterableOSMTiles({ layers, isDarkTheme = false, tileLa
   const layerKey = `${tileLayer}-${JSON.stringify(layers)}`;
 
   useEffect(() => {
-    console.log('Tile URL changed to:', tileUrl);
-    console.log('CSS Filter:', cssFilter);
+    logger.debug('Tile URL changed', { url: tileUrl });
+    logger.debug('CSS Filter applied', { filter: cssFilter });
   }, [tileUrl, cssFilter]);
 
   return (

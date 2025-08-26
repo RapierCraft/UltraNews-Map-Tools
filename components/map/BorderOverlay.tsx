@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { GeoJSON, useMap } from 'react-leaflet';
-import L from 'leaflet';
 
 interface BorderOverlayProps {
   location?: {
@@ -12,7 +11,7 @@ interface BorderOverlayProps {
     osm_id?: number;
     osm_type?: string;
     boundingbox?: string[];
-    geojson?: any;
+    geojson?: GeoJSON.Geometry;
     type?: string;
     class?: string;
   };
@@ -27,7 +26,7 @@ interface BorderOverlayProps {
 
 interface BoundaryData {
   type: string;
-  geometry: any;
+  geometry: GeoJSON.Geometry;
   properties: {
     name: string;
     admin_level: string;
@@ -39,7 +38,6 @@ interface BoundaryData {
 export default function BorderOverlay({ location, enabled, borderTypes }: BorderOverlayProps) {
   const [boundaries, setBoundaries] = useState<BoundaryData[]>([]);
   const [loading, setLoading] = useState(false);
-  const map = useMap();
 
   const getAdminLevelFromType = (type: string): string => {
     // Map OSM place types to admin levels
@@ -51,44 +49,14 @@ export default function BorderOverlay({ location, enabled, borderTypes }: Border
     return '8'; // Default
   };
 
-  useEffect(() => {
-    if (!location || !enabled) {
-      setBoundaries([]);
-      return;
-    }
-
-    // If the search result has geojson, use it directly
-    if (location.geojson && location.osm_id) {
-      const directBoundary: BoundaryData = {
-        type: 'Feature',
-        geometry: location.geojson,
-        properties: {
-          name: location.name,
-          admin_level: getAdminLevelFromType(location.type || ''),
-          boundary: 'administrative',
-          osm_id: location.osm_id.toString()
-        }
-      };
-      setBoundaries([directBoundary]);
-      setLoading(false);
-    } else {
-      // Otherwise fetch boundaries based on OSM ID or location
-      if (location.osm_id && location.osm_type) {
-        fetchBoundaryBySearchResult(location);
-      } else {
-        fetchBoundaries(location.lat, location.lon);
-      }
-    }
-  }, [location, enabled]);
-
-  const fetchBoundaryBySearchResult = async (location: any) => {
+  const fetchBoundaryBySearchResult = async (searchLocation: { osm_id: number; osm_type: string; name: string; type?: string; }) => {
     setLoading(true);
     setBoundaries([]);
     
     try {
-      const osmType = location.osm_type === 'node' ? 'N' : 
-                     location.osm_type === 'way' ? 'W' : 'R';
-      const osmId = `${osmType}${location.osm_id}`;
+      const osmType = searchLocation.osm_type === 'node' ? 'N' : 
+                     searchLocation.osm_type === 'way' ? 'W' : 'R';
+      const osmId = `${osmType}${searchLocation.osm_id}`;
       
       // Fetch the boundary using the OSM ID from the search result
       const response = await fetch(
@@ -103,8 +71,8 @@ export default function BorderOverlay({ location, enabled, borderTypes }: Border
             type: 'Feature',
             geometry: feature.geometry,
             properties: {
-              name: location.name,
-              admin_level: getAdminLevelFromType(location.type || ''),
+              name: searchLocation.name,
+              admin_level: getAdminLevelFromType(searchLocation.type || ''),
               boundary: 'administrative',
               osm_id: osmId
             }
@@ -113,10 +81,68 @@ export default function BorderOverlay({ location, enabled, borderTypes }: Border
         }
       }
     } catch (error) {
-      console.error('Error fetching boundary by search result:', error);
+      // Error handled silently
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchBoundaryByName = async (name: string, type: string): Promise<BoundaryData | null> => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=geojson&q=${encodeURIComponent(name)}&polygon_geojson=1&limit=1`
+      );
+      
+      if (!response.ok) return null;
+      
+      const data = await response.json();
+      if (data.features && data.features.length > 0) {
+        const feature = data.features[0];
+        return {
+          type: 'Feature',
+          geometry: feature.geometry,
+          properties: {
+            name: name,
+            admin_level: type === 'country' ? '2' : 
+                        type === 'state' ? '4' : 
+                        type === 'city' ? '8' : '10',
+            boundary: 'administrative',
+            osm_id: feature.properties?.osm_id
+          }
+        };
+      }
+    } catch (error) {
+      // Error handled silently
+    }
+    return null;
+  };
+  
+  const fetchBoundaryByOSMId = async (osmId: string): Promise<BoundaryData | null> => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/lookup?format=geojson&osm_ids=${osmId}&polygon_geojson=1`
+      );
+      
+      if (!response.ok) return null;
+      
+      const data = await response.json();
+      if (data.features && data.features.length > 0) {
+        const feature = data.features[0];
+        return {
+          type: 'Feature',
+          geometry: feature.geometry,
+          properties: {
+            name: feature.properties?.display_name || 'Unknown',
+            admin_level: feature.properties?.admin_level || '8',
+            boundary: 'administrative',
+            osm_id: osmId
+          }
+        };
+      }
+    } catch (error) {
+      // Error handled silently
+    }
+    return null;
   };
 
   const fetchBoundaries = async (lat: number, lon: number) => {
@@ -132,7 +158,7 @@ export default function BorderOverlay({ location, enabled, borderTypes }: Border
       if (!reverseResponse.ok) throw new Error('Failed to fetch location details');
       
       const locationData = await reverseResponse.json();
-      console.log('Location data:', locationData);
+      // Location data fetched successfully
       
       const boundaryPromises = [];
       
@@ -185,73 +211,45 @@ export default function BorderOverlay({ location, enabled, borderTypes }: Border
       const results = await Promise.all(boundaryPromises);
       const validBoundaries = results.filter(b => b !== null) as BoundaryData[];
       
-      console.log('Fetched boundaries:', validBoundaries);
+      // Boundaries fetched successfully
       setBoundaries(validBoundaries);
       
     } catch (error) {
-      console.error('Error fetching boundaries:', error);
+      // Error handled silently
     } finally {
       setLoading(false);
     }
   };
-  
-  const fetchBoundaryByName = async (name: string, type: string): Promise<BoundaryData | null> => {
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=geojson&q=${encodeURIComponent(name)}&polygon_geojson=1&limit=1`
-      );
-      
-      if (!response.ok) return null;
-      
-      const data = await response.json();
-      if (data.features && data.features.length > 0) {
-        const feature = data.features[0];
-        return {
-          type: 'Feature',
-          geometry: feature.geometry,
-          properties: {
-            name: name,
-            admin_level: type === 'country' ? '2' : 
-                        type === 'state' ? '4' : 
-                        type === 'city' ? '8' : '10',
-            boundary: 'administrative',
-            osm_id: feature.properties?.osm_id
-          }
-        };
-      }
-    } catch (error) {
-      console.error(`Error fetching boundary for ${name}:`, error);
+
+  useEffect(() => {
+    if (!location || !enabled) {
+      setBoundaries([]);
+      return;
     }
-    return null;
-  };
-  
-  const fetchBoundaryByOSMId = async (osmId: string): Promise<BoundaryData | null> => {
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/lookup?format=geojson&osm_ids=${osmId}&polygon_geojson=1`
-      );
-      
-      if (!response.ok) return null;
-      
-      const data = await response.json();
-      if (data.features && data.features.length > 0) {
-        const feature = data.features[0];
-        return {
-          type: 'Feature',
-          geometry: feature.geometry,
-          properties: {
-            name: feature.properties?.display_name || 'Unknown',
-            admin_level: feature.properties?.admin_level || '8',
-            boundary: 'administrative',
-            osm_id: osmId
-          }
-        };
+
+    // If the search result has geojson, use it directly
+    if (location.geojson && location.osm_id) {
+      const directBoundary: BoundaryData = {
+        type: 'Feature',
+        geometry: location.geojson,
+        properties: {
+          name: location.name,
+          admin_level: getAdminLevelFromType(location.type || ''),
+          boundary: 'administrative',
+          osm_id: location.osm_id.toString()
+        }
+      };
+      setBoundaries([directBoundary]);
+      setLoading(false);
+    } else {
+      // Otherwise fetch boundaries based on OSM ID or location
+      if (location.osm_id && location.osm_type) {
+        fetchBoundaryBySearchResult(location);
+      } else {
+        fetchBoundaries(location.lat, location.lon);
       }
-    } catch (error) {
-      console.error(`Error fetching boundary for OSM ID ${osmId}:`, error);
     }
-    return null;
-  };
+  }, [location, enabled]);
 
 
   const getBorderStyle = (adminLevel: string) => {

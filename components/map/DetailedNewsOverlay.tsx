@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Polyline, Circle, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Card } from '@/components/ui/card';
+import { EXPLOSION_SITES, fetchNordStreamCoordinates, PipelineCoordinate } from '@/lib/pipelineData';
 
 interface NewsStory {
   id: string;
@@ -44,8 +45,14 @@ export default function DetailedNewsOverlay({ story, enabled, timelinePosition }
 
     setIsLoading(true);
     
+    console.log('Story analysis:', { id: story.id, includesNordStream: story.content.toLowerCase().includes('nord stream') });
+    
     if (story.id === 'nord-stream' || story.content.toLowerCase().includes('nord stream')) {
-      generateNordStreamDetailedOverlay();
+      generateNordStreamDetailedOverlay().catch(error => {
+        console.error('Error generating Nord Stream overlay:', error);
+        setIsLoading(false);
+      });
+      return; // Don't set loading to false immediately for async function
     } else if (story.id === 'svb-collapse' || story.content.toLowerCase().includes('silicon valley bank')) {
       generateSVBDetailedOverlay();
     } else if (story.id === 'ukraine-conflict' || story.content.toLowerCase().includes('ukraine')) {
@@ -55,45 +62,34 @@ export default function DetailedNewsOverlay({ story, enabled, timelinePosition }
     setIsLoading(false);
   }, [story, enabled, timelinePosition]);
 
-  const generateNordStreamDetailedOverlay = () => {
-    // ACTUAL NORD STREAM PIPELINE COORDINATES
-    const pipelineRoute = [
-      [60.1699, 27.7172], // Vyborg, Russia - Launch point
-      [59.8944, 26.7811], // Gulf of Finland
-      [59.3293, 24.7136], // Estonian waters
-      [58.5953, 23.3379], // Latvian waters  
-      [57.7089, 21.1619], // Lithuanian waters
-      [56.9496, 19.9456], // Polish waters
-      [56.1612, 18.6435], // Near Gotland
-      [55.6050, 17.7253], // Swedish waters
-      [55.4400, 15.6000], // Explosion zone
-      [54.9167, 14.1167], // German waters
-      [54.0776, 13.0878]  // Greifswald, Germany - End point
-    ];
-
-    // REAL EXPLOSION COORDINATES (from seismic data)
-    const explosionSites = [
-      {
-        id: 'ns1-explosion',
-        position: [55.5163, 15.4738] as [number, number],
-        name: 'Nord Stream 1 Rupture',
-        time: '2022-09-26T02:03:00Z',
-        seismicMagnitude: 2.3,
-        gasReleased: '115,000 tonnes',
-        depth: '70 meters',
-        exclusionRadius: 9260 // 5 nautical miles in meters
-      },
-      {
-        id: 'ns2-explosion', 
-        position: [55.3259, 15.6437] as [number, number],
-        name: 'Nord Stream 2 Rupture',
-        time: '2022-09-26T19:03:00Z',
-        seismicMagnitude: 2.1,
-        gasReleased: '95,000 tonnes',
-        depth: '70 meters',
-        exclusionRadius: 9260
-      }
-    ];
+  const generateNordStreamDetailedOverlay = async () => {
+    console.log('Fetching real Nord Stream coordinates from OpenStreetMap...');
+    
+    // Fetch real pipeline coordinates from OpenStreetMap
+    const pipelineCoords = await fetchNordStreamCoordinates();
+    
+    console.log('OpenStreetMap data received:', {
+      ns1Points: pipelineCoords.ns1.length,
+      ns2Points: pipelineCoords.ns2.length
+    });
+    
+    if (pipelineCoords.ns1.length === 0 && pipelineCoords.ns2.length === 0) {
+      console.error('No pipeline coordinates received from OpenStreetMap!');
+      setIsLoading(false);
+      return;
+    }
+    
+    // Use actual explosion coordinates from research
+    const explosionSites = EXPLOSION_SITES.map(site => ({
+      id: site.id,
+      position: site.position,
+      name: `${site.pipeline} Rupture`,
+      time: site.date,
+      seismicMagnitude: site.seismicMagnitude,
+      gasReleased: site.seismicMagnitude > 2 ? '115,000 tonnes' : '95,000 tonnes',
+      depth: `${site.depth} meters`,
+      exclusionRadius: 9260 // 5 nautical miles in meters
+    }));
 
     // REAL GAS INFRASTRUCTURE
     const gasInfrastructure = [
@@ -219,30 +215,41 @@ export default function DetailedNewsOverlay({ story, enabled, timelinePosition }
       }))
     ]);
 
-    // Pipeline route
-    setFlowLines([
-      {
+    // Pipeline routes using real OpenStreetMap coordinates
+    const pipelineFlows = [];
+    
+    if (pipelineCoords.ns1.length > 0) {
+      pipelineFlows.push({
         id: 'ns1-pipeline',
-        coordinates: pipelineRoute,
+        coordinates: pipelineCoords.ns1.map(coord => [coord.lat, coord.lng] as [number, number]),
         name: 'Nord Stream 1',
-        capacity: '55 BCM/year',
-        diameter: '48 inches',
+        capacity: '27.5 BCM/year per line',
+        diameter: '1.153 m',
         length: '1,224 km',
         constructionCost: '€7.4 billion',
         operational: timelinePosition < 50, // Before explosion
-        color: timelinePosition < 50 ? '#4488ff' : '#ff4444'
-      },
-      {
-        id: 'ns2-pipeline',
-        coordinates: pipelineRoute.map(([lat, lon]) => [lat - 0.02, lon]), // Parallel route
-        name: 'Nord Stream 2', 
-        capacity: '55 BCM/year',
-        diameter: '48 inches',
+        color: timelinePosition < 50 ? '#4488ff' : '#ff4444',
+        source: 'OpenStreetMap Relation 2006544'
+      });
+    }
+    
+    if (pipelineCoords.ns2.length > 0) {
+      pipelineFlows.push({
+        id: 'ns2-pipeline', 
+        coordinates: pipelineCoords.ns2.map(coord => [coord.lat, coord.lng] as [number, number]),
+        name: 'Nord Stream 2',
+        capacity: '27.5 BCM/year per line',
+        diameter: '1.153 m', 
         length: '1,234 km',
         constructionCost: '€9.5 billion',
         operational: false, // Never became operational
-        color: '#888888'
-      },
+        color: '#888888',
+        source: 'OpenStreetMap Relation 16489915'
+      });
+    }
+    
+    setFlowLines([
+      ...pipelineFlows,
       ...alternativeRoutes.map(route => ({
         id: `alt-${route.name}`,
         coordinates: [route.from, route.to],
@@ -256,6 +263,8 @@ export default function DetailedNewsOverlay({ story, enabled, timelinePosition }
 
     // Economic impact zones
     setImpactZones(economicImpactZones);
+    
+    setIsLoading(false);
   };
 
   const generateSVBDetailedOverlay = () => {
@@ -596,6 +605,7 @@ export default function DetailedNewsOverlay({ story, enabled, timelinePosition }
                 {flow.constructionCost && <div><strong>Cost:</strong> {flow.constructionCost}</div>}
                 {flow.status && <div><strong>Status:</strong> {flow.status}</div>}
                 {flow.route && <div><strong>Route:</strong> {flow.route}</div>}
+                {flow.source && <div><strong>Data Source:</strong> {flow.source}</div>}
               </div>
             </div>
           </Popup>

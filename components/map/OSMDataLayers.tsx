@@ -2,6 +2,7 @@
 
 import { TileLayer } from 'react-leaflet';
 import { useEffect } from 'react';
+import { logger } from '@/lib/logger';
 
 interface LayerState {
   roads: boolean;
@@ -23,7 +24,7 @@ interface OSMDataLayersProps {
 
 export default function OSMDataLayers({ layers, isDarkTheme = false }: OSMDataLayersProps) {
   useEffect(() => {
-    console.log('OSM Data Layers updated:', layers);
+    logger.debug('OSM Data Layers updated', layers);
   }, [layers]);
 
   // Individual overlay URLs for different OSM data types

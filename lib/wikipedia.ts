@@ -121,11 +121,15 @@ export class WikipediaAPI {
 export const WIKIPEDIA_TOPICS = {
   'nord-stream': {
     pipeline: 'Nord Stream',
+    pipeline_sabotage: 'Nord Stream pipeline sabotage',
     compressor: 'Natural gas compressor station',
     terminal: 'Liquefied natural gas terminal',
     baltic: 'Baltic Sea',
     gazprom: 'Gazprom',
-    methane: 'Methane emissions'
+    methane: 'Methane emissions',
+    vyborg: 'Vyborg',
+    lubmin: 'Lubmin',
+    ust_luga: 'Ust-Luga'
   },
   'svb-collapse': {
     bank: 'Silicon Valley Bank',
@@ -144,3 +148,97 @@ export const WIKIPEDIA_TOPICS = {
     luhansk: 'Luhansk Oblast'
   }
 };
+
+// Function to get geographic data from Wikipedia articles
+export async function getWikipediaMapData(title: string): Promise<any> {
+  try {
+    // Try to fetch the Wikipedia page content
+    const response = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=revisions&titles=${encodeURIComponent(title)}&rvprop=content&rvslots=main&origin=*`
+    );
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    const pages = Object.values(data.query?.pages || {});
+    
+    if (pages.length === 0) return null;
+    
+    const page = pages[0] as any;
+    const content = page.revisions?.[0]?.slots?.main?.['*'];
+    
+    if (!content) return null;
+    
+    // Look for coordinate data in Wikipedia markup
+    const coordinateMatches = content.match(/\{\{coord\|([^}]+)\}\}/g);
+    const coordinates = [];
+    
+    if (coordinateMatches) {
+      for (const match of coordinateMatches) {
+        const coordString = match.replace(/\{\{coord\|/, '').replace(/\}\}/, '');
+        const parts = coordString.split('|');
+        
+        if (parts.length >= 2) {
+          const lat = parseFloat(parts[0]);
+          const lng = parseFloat(parts[1]);
+          
+          if (!isNaN(lat) && !isNaN(lng)) {
+            coordinates.push({ lat, lng });
+          }
+        }
+      }
+    }
+    
+    // Look for external map data references
+    const mapDataMatches = content.match(/\{\{ExternalData[^}]+\}\}/g);
+    const externalMapRefs = [];
+    
+    if (mapDataMatches) {
+      for (const match of mapDataMatches) {
+        externalMapRefs.push(match);
+      }
+    }
+    
+    return {
+      title: page.title,
+      coordinates,
+      externalMapRefs,
+      hasMapData: coordinates.length > 0 || externalMapRefs.length > 0
+    };
+  } catch (error) {
+    console.error('Error fetching Wikipedia map data:', error);
+    return null;
+  }
+}
+
+// Function to extract GeoJSON from Wikimedia Commons
+export async function getWikimediaGeoJSON(mapTitle: string): Promise<any> {
+  try {
+    const response = await fetch(
+      `https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=revisions&titles=Data:${encodeURIComponent(mapTitle)}&rvprop=content&rvslots=main&origin=*`
+    );
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    const pages = Object.values(data.query?.pages || {});
+    
+    if (pages.length === 0) return null;
+    
+    const page = pages[0] as any;
+    const content = page.revisions?.[0]?.slots?.main?.['*'];
+    
+    if (!content) return null;
+    
+    try {
+      // Try to parse as JSON (GeoJSON format)
+      return JSON.parse(content);
+    } catch (parseError) {
+      console.error('Failed to parse map data as JSON:', parseError);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error fetching Wikimedia GeoJSON:', error);
+    return null;
+  }
+}

@@ -6,7 +6,9 @@ import MapControls from './MapControls';
 import SearchBar from './SearchBar';
 import SimpleThemeToggle from '@/components/SimpleThemeToggle';
 import StoryAnalyzer from './StoryAnalyzer';
+import StoryMapLegend from './StoryMapLegend';
 import { Card } from '@/components/ui/card';
+import { logger } from '@/lib/logger';
 
 interface Marker {
   id: string;
@@ -107,7 +109,7 @@ export default function LiveMapView({
 
   // Handle theme change from SimpleThemeToggle
   const handleThemeChange = useCallback((isDark: boolean) => {
-    console.log('Theme change received:', isDark);
+    logger.mapEvent('theme_change', { isDark });
     setIsDarkTheme(isDark);
     
     // Use standard OSM for both themes to avoid rate limits
@@ -115,9 +117,9 @@ export default function LiveMapView({
     setCurrentLayer('osm-standard');
   }, []);
 
-  // Debug layer changes
+  // Track layer changes
   useEffect(() => {
-    console.log('Current map layer is now:', currentLayer);
+    logger.mapEvent('layer_change', { layer: currentLayer });
   }, [currentLayer]);
 
   // Simulate live marker updates
@@ -235,17 +237,17 @@ export default function LiveMapView({
   }, []);
 
   const handleDataLayersChange = useCallback((layers: LayerState) => {
-    console.log('Data layers changed:', layers);
+    logger.mapEvent('data_layers_change', layers);
     setDataLayers(layers);
   }, []);
 
   const handleBorderSettingsChange = useCallback((settings: BorderSettings) => {
-    console.log('Border settings changed:', settings);
+    logger.mapEvent('border_settings_change', settings);
     setBorderSettings(settings);
   }, []);
 
   const handleStoryAnalyze = useCallback((story: NewsStory) => {
-    console.log('Analyzing story:', story.headline);
+    logger.info('Analyzing news story', { headline: story.headline, source: story.source });
     setCurrentStory(story);
     setIsAnalyzingStory(true);
     
@@ -327,6 +329,18 @@ export default function LiveMapView({
         timelinePosition={timelinePosition}
         className="w-full h-full"
       />
+
+      {/* Story Map Legend - shown when analyzing news story */}
+      {currentStory && !isAnalyzingStory && (
+        <StoryMapLegend 
+          storyType={
+            currentStory.headline.toLowerCase().includes('ukraine') || currentStory.content.toLowerCase().includes('war') ? 'ukraine' :
+            currentStory.headline.toLowerCase().includes('pipeline') || currentStory.content.toLowerCase().includes('nord stream') ? 'pipeline' :
+            currentStory.headline.toLowerCase().includes('bank') || currentStory.content.toLowerCase().includes('silicon valley bank') ? 'banking' :
+            'generic'
+          }
+        />
+      )}
     </div>
   );
 }

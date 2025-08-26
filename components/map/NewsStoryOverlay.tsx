@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Circle, Polygon, Polyline, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { OSMBoundaryService, UKRAINE_FRONTLINE, UKRAINE_OBLASTS } from '@/lib/osmBoundaries';
 
 // Types for news story analysis
 interface NewsStory {
@@ -43,8 +44,20 @@ interface StoryVisualization {
   }[];
   dataOverlays: {
     heatmaps: { points: [number, number, number][]; type: string }[];
-    markers: { location: [number, number]; data: any; icon: string }[];
+    markers: { location: [number, number]; data: Record<string, unknown>; icon: string }[];
   };
+  frontlines?: {
+    coordinates: [number, number][];
+    type: 'active_frontline' | 'ceasefire_line' | 'disputed_border';
+    lastUpdated: Date;
+    confidence: number;
+  }[];
+  areaControl?: {
+    name: string;
+    areas: [number, number][][];
+    controlledBy: 'ukraine' | 'russia' | 'contested' | 'neutral';
+    confidence: number;
+  }[];
 }
 
 interface NewsStoryOverlayProps {
@@ -56,7 +69,33 @@ interface NewsStoryOverlayProps {
 export default function NewsStoryOverlay({ story, enabled, timelinePosition = 100 }: NewsStoryOverlayProps) {
   const [visualization, setVisualization] = useState<StoryVisualization | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [realBoundaries, setRealBoundaries] = useState<Array<{
+    geometry: GeoJSON.Geometry;
+    controlStatus: {
+      name: string;
+      osmId: string;
+      controlledBy: 'ukraine' | 'russia' | 'contested';
+      confidence: number;
+      lastUpdated: string;
+    };
+  }>>([]);
+  const [boundariesLoading, setBoundariesLoading] = useState(false);
   const map = useMap();
+
+  // Load real OSM boundaries for Ukraine
+  const loadRealBoundaries = async () => {
+    if (boundariesLoading || realBoundaries.length > 0) return;
+    
+    setBoundariesLoading(true);
+    try {
+      const boundaries = await OSMBoundaryService.getUkrainianOblasts();
+      setRealBoundaries(boundaries);
+    } catch (error) {
+      console.warn('Failed to load real boundaries:', error);
+    } finally {
+      setBoundariesLoading(false);
+    }
+  };
 
   // Mock story analyzer - in real implementation this would call AI service
   const analyzeStory = async (story: NewsStory): Promise<StoryVisualization> => {
@@ -70,7 +109,7 @@ export default function NewsStoryOverlay({ story, enabled, timelinePosition = 10
       return generateNordStreamVisualization();
     } else if (story.headline.toLowerCase().includes('bank') || story.content.toLowerCase().includes('silicon valley bank')) {
       return generateSVBVisualization();
-    } else if (story.content.toLowerCase().includes('ukraine') || story.content.toLowerCase().includes('war')) {
+    } else if (story.content.toLowerCase().includes('ukraine') || story.content.toLowerCase().includes('war') || story.content.toLowerCase().includes('russia')) {
       return generateUkraineVisualization();
     } else {
       return generateGenericVisualization(story);
@@ -110,20 +149,7 @@ export default function NewsStoryOverlay({ story, enabled, timelinePosition = 10
         ]
       },
       connections: [
-        {
-          from: [60.1699, 27.7172], // Vyborg, Russia
-          to: [54.0776, 13.0878], // Greifswald, Germany
-          type: 'supply',
-          strength: 0, // Disrupted
-          bidirectional: false
-        },
-        {
-          from: [62.4720, 5.9301], // Norway
-          to: [52.1326, 5.2913], // Netherlands
-          type: 'supply',
-          strength: 1, // Increased capacity
-          bidirectional: false
-        }
+        // All pipeline connections removed - now handled by ProperNewsOverlay with accurate OpenStreetMap data
       ],
       timeline: [
         {
@@ -157,7 +183,9 @@ export default function NewsStoryOverlay({ story, enabled, timelinePosition = 10
             icon: 'explosion'
           }
         ]
-      }
+      },
+      frontlines: [],
+      areaControl: []
     };
   };
 
@@ -252,79 +280,81 @@ export default function NewsStoryOverlay({ story, enabled, timelinePosition = 10
             icon: 'bank'
           }
         ]
-      }
+      },
+      frontlines: [],
+      areaControl: []
     };
   };
 
   const generateUkraineVisualization = (): StoryVisualization => {
+    // Trigger loading of real boundaries
+    loadRealBoundaries();
+
+    // Real frontline coordinates based on ISW reports
+    const frontlineCoordinates: [number, number][] = UKRAINE_FRONTLINE.map(point => [point.lat, point.lng]);
+    
+    // Key cities with real conflict status
+    const keyCities = [
+      { location: [50.4501, 30.5234], name: 'Kyiv', status: 'Ukrainian controlled', population: '2.8M', strategic: 'Capital' },
+      { location: [49.9935, 36.2304], name: 'Kharkiv', status: 'Ukrainian controlled', population: '1.4M', strategic: 'Regional center' },
+      { location: [46.6354, 32.6169], name: 'Kherson', status: 'Ukrainian controlled (liberated)', population: '280k', strategic: 'Dnipro crossing' },
+      { location: [46.4825, 30.7233], name: 'Odesa', status: 'Ukrainian controlled', population: '1M', strategic: 'Major port' },
+      { location: [48.0159, 37.8029], name: 'Donetsk', status: 'Russian occupied', population: '900k', strategic: 'Regional center' },
+      { location: [48.5683, 38.2003], name: 'Bakhmut', status: 'Contested/Russian', population: '70k', strategic: 'Transport hub' }
+    ];
+
+    // Create area control based on real oblast data
+    const ukrainianControlledAreas = UKRAINE_OBLASTS
+      .filter(oblast => oblast.controlledBy === 'ukraine')
+      .map(oblast => oblast.name);
+
+    const russianControlledAreas = UKRAINE_OBLASTS
+      .filter(oblast => oblast.controlledBy === 'russia')
+      .map(oblast => oblast.name);
+
     return {
       primaryLocation: {
-        name: 'Ukraine',
-        coordinates: [48.3794, 31.1656],
+        name: 'Ukraine Conflict',
+        coordinates: [49.0, 32.0], // Geographic center of Ukraine
         type: 'country',
-        confidence: 0.95,
-        context: 'Conflict zone'
+        confidence: 0.98,
+        context: 'Real administrative boundaries and frontline positions'
       },
       impactZones: {
-        immediate: { 
-          center: [48.3794, 31.1656], 
-          radius: 500000, // 500km impact zone
-          severity: 'high' 
-        },
-        secondary: [
-          { 
-            areas: [
-              [[44.0, 20.0], [44.0, 40.0], [60.0, 40.0], [60.0, 20.0], [44.0, 20.0]] // Eastern Europe
-            ], 
-            type: 'Refugee crisis region' 
-          }
-        ],
-        economic: [
-          { 
-            regions: [
-              [[35.0, -10.0], [35.0, 50.0], [70.0, 50.0], [70.0, -10.0], [35.0, -10.0]] // Europe
-            ], 
-            impact: 40 // 40% energy supply disruption
-          }
-        ]
+        immediate: { center: [49.0, 32.0], radius: 500000, severity: 'high' },
+        secondary: [],
+        economic: []
       },
-      connections: [
-        {
-          from: [50.4501, 30.5234], // Kyiv
-          to: [52.2297, 21.0122], // Warsaw (refugee flow)
-          type: 'information',
-          strength: 0.9,
-          bidirectional: false
-        },
-        {
-          from: [55.7558, 37.6173], // Moscow
-          to: [48.3794, 31.1656], // Ukraine center
-          type: 'political',
-          strength: 1.0,
-          bidirectional: false
-        }
-      ],
+      connections: [],
       timeline: [
-        {
-          timestamp: new Date('2022-02-24T05:00:00Z'),
-          location: [50.4501, 30.5234],
-          event: 'Conflict begins',
-          impact: 80
-        }
+        { timestamp: new Date('2022-02-24'), location: [49.0, 32.0], event: 'Conflict begins', impact: 100 }
       ],
       dataOverlays: {
         heatmaps: [
           {
-            points: [
-              [50.4501, 30.5234, 95], // Kyiv
-              [49.9935, 36.2304, 90], // Kharkiv
-              [46.4825, 30.7233, 85]  // Odesa
-            ],
-            type: 'Conflict intensity'
+            points: UKRAINE_FRONTLINE.map(point => [point.lat, point.lng, 95] as [number, number, number]),
+            type: 'Frontline intensity'
           }
         ],
-        markers: []
-      }
+        markers: keyCities.map(city => ({
+          location: city.location as [number, number],
+          data: {
+            status: city.status,
+            population: city.population,
+            strategic: city.strategic
+          },
+          icon: city.status.includes('controlled') ? 'city' : 'contested'
+        }))
+      },
+      frontlines: [
+        {
+          coordinates: frontlineCoordinates,
+          type: 'active_frontline' as const,
+          lastUpdated: new Date('2024-01-15'),
+          confidence: 0.85
+        }
+      ],
+      areaControl: [] // Will be populated with real OSM boundaries when they load
     };
   };
 
@@ -345,7 +375,9 @@ export default function NewsStoryOverlay({ story, enabled, timelinePosition = 10
       },
       connections: [],
       timeline: [],
-      dataOverlays: { heatmaps: [], markers: [] }
+      dataOverlays: { heatmaps: [], markers: [] },
+      frontlines: [],
+      areaControl: []
     };
   };
 
@@ -377,8 +409,103 @@ export default function NewsStoryOverlay({ story, enabled, timelinePosition = 10
     event.timestamp <= currentTimestamp
   );
 
+  // Render based on story type
+  if (story.content.toLowerCase().includes('ukraine') || story.content.toLowerCase().includes('russia')) {
+    return (
+      <>
+        {/* UKRAINE VISUALIZATION - Real OSM Boundaries */}
+        
+        {/* 1. Real OSM Administrative Boundaries with Control Status */}
+        {realBoundaries.map((boundary, index) => {
+          if (!boundary.geometry || !boundary.controlStatus) return null;
+          
+          const controlStatus = boundary.controlStatus;
+          const isUkrainian = controlStatus.controlledBy === 'ukraine';
+          
+          return (
+            <Polygon
+              key={`oblast-${index}`}
+              positions={boundary.geometry.type === 'Polygon' 
+                ? (boundary.geometry.coordinates as number[][][]).map(ring => 
+                    ring.map(coord => [coord[1], coord[0]]) // GeoJSON is [lng, lat], Leaflet needs [lat, lng]
+                  )
+                : []
+              }
+              pathOptions={{
+                color: isUkrainian ? '#0057B7' : '#D52B1E', // Ukrainian blue vs Russian red
+                weight: 2,
+                opacity: 0.7,
+                fillOpacity: Math.max(0.1, (1 - controlStatus.confidence) * 0.3), // Less confident = more transparent
+                fillColor: isUkrainian ? '#0057B7' : '#D52B1E'
+              }}
+            >
+              <Popup>
+                <div>
+                  <strong>{controlStatus.name}</strong><br/>
+                  Control: {isUkrainian ? 'Ukrainian Government' : 'Russian Forces'}<br/>
+                  Confidence: {Math.round(controlStatus.confidence * 100)}%<br/>
+                  <small>Last updated: {controlStatus.lastUpdated}</small>
+                </div>
+              </Popup>
+            </Polygon>
+          );
+        })}
+
+        {/* Loading indicator for boundaries */}
+        {boundariesLoading && (
+          <div className="absolute top-20 right-4 z-[1001] bg-white/90 dark:bg-gray-800/90 px-3 py-2 rounded-md">
+            <div className="text-sm">Loading real administrative boundaries...</div>
+          </div>
+        )}
+
+        {/* 2. Active Frontline - Bold and Clear */}
+        {visualization.frontlines?.map((frontline, index) => (
+          <Polyline
+            key={`frontline-${index}`}
+            positions={frontline.coordinates}
+            pathOptions={{
+              color: '#FF0000',
+              weight: 4,
+              opacity: 1.0
+            }}
+          >
+            <Popup>
+              <div>
+                <strong>Active Frontline</strong><br/>
+                Last Updated: Jan 15, 2024<br/>
+                <small>Current battle positions</small>
+              </div>
+            </Popup>
+          </Polyline>
+        ))}
+
+        {/* 3. Key Cities Only - Major Strategic Points */}
+        {visualization.dataOverlays.markers
+          .filter(marker => ['capital', 'city', 'port'].includes(marker.icon))
+          .map((marker, index) => (
+            <Marker
+              key={`key-city-${index}`}
+              position={marker.location}
+            >
+              <Popup>
+                <div>
+                  <strong>Strategic Location</strong><br/>
+                  Status: {marker.data.status}<br/>
+                  Population: {marker.data.population}<br/>
+                  {marker.data.strategic && <div>Role: {marker.data.strategic}</div>}
+                </div>
+              </Popup>
+            </Marker>
+        ))}
+      </>
+    );
+  }
+
+  // For OTHER STORIES (Nord Stream, SVB, etc.) - Use Standard Visualization
   return (
     <>
+      {/* Standard story visualization for non-Ukraine stories */}
+      
       {/* Primary impact zone */}
       {visualization.impactZones.immediate && (
         <Circle
@@ -388,36 +515,39 @@ export default function NewsStoryOverlay({ story, enabled, timelinePosition = 10
             color: visualization.impactZones.immediate.severity === 'high' ? '#FF0000' :
                    visualization.impactZones.immediate.severity === 'medium' ? '#FF8800' : '#FFAA00',
             weight: 2,
-            opacity: 0.8,
+            opacity: 0.7,
             fillOpacity: 0.1
           }}
-        />
+        >
+          <Popup>
+            <div>
+              <strong>Primary Impact Zone</strong><br/>
+              Severity: {visualization.impactZones.immediate.severity}
+            </div>
+          </Popup>
+        </Circle>
       )}
 
-      {/* Secondary impact areas */}
-      {visualization.impactZones.secondary.map((zone, index) => 
-        zone.areas.map((area, areaIndex) => (
-          <Polygon
-            key={`secondary-${index}-${areaIndex}`}
-            positions={area}
-            pathOptions={{
-              color: '#0066CC',
-              weight: 2,
-              opacity: 0.6,
-              fillOpacity: 0.05,
-              dashArray: '10, 10'
-            }}
-          >
-            <Popup>
-              <div>
-                <strong>{zone.type}</strong>
-              </div>
-            </Popup>
-          </Polygon>
-        ))
-      )}
+      {/* Connection lines - DISABLED: Using accurate OpenStreetMap pipeline data in ProperNewsOverlay instead */}
 
-      {/* Economic impact zones */}
+      {/* Data markers */}
+      {visualization.dataOverlays.markers.map((marker, index) => (
+        <Marker
+          key={`marker-${index}`}
+          position={marker.location}
+        >
+          <Popup>
+            <div>
+              <strong>{marker.icon === 'explosion' ? 'Incident Location' : 'Key Location'}</strong><br/>
+              {Object.entries(marker.data).map(([key, value]) => (
+                <div key={key}>{key}: {String(value)}</div>
+              ))}
+            </div>
+          </Popup>
+        </Marker>
+      ))}
+
+      {/* Economic impact zones for banking stories */}
       {visualization.impactZones.economic.map((zone, index) => 
         zone.regions.map((region, regionIndex) => (
           <Polygon
@@ -426,8 +556,8 @@ export default function NewsStoryOverlay({ story, enabled, timelinePosition = 10
             pathOptions={{
               color: '#FF6600',
               weight: 1,
-              opacity: 0.7,
-              fillOpacity: zone.impact / 100 * 0.3,
+              opacity: 0.6,
+              fillOpacity: zone.impact / 100 * 0.2,
               dashArray: '5, 5'
             }}
           >
@@ -441,77 +571,13 @@ export default function NewsStoryOverlay({ story, enabled, timelinePosition = 10
         ))
       )}
 
-      {/* Connection lines */}
-      {visualization.connections.map((connection, index) => (
-        <Polyline
-          key={`connection-${index}`}
-          positions={[connection.from, connection.to]}
-          pathOptions={{
-            color: connection.type === 'supply' ? '#00AA00' :
-                   connection.type === 'financial' ? '#AA0000' :
-                   connection.type === 'political' ? '#0000AA' : '#AAAAAA',
-            weight: Math.max(1, connection.strength * 4),
-            opacity: connection.strength,
-            dashArray: connection.strength === 0 ? '10, 10' : undefined
-          }}
-        >
-          <Popup>
-            <div>
-              <strong>{connection.type.charAt(0).toUpperCase() + connection.type.slice(1)} Connection</strong><br/>
-              Strength: {Math.round(connection.strength * 100)}%
-            </div>
-          </Popup>
-        </Polyline>
-      ))}
-
-      {/* Timeline event markers */}
-      {activeTimelineEvents.map((event, index) => (
-        <Circle
-          key={`timeline-${index}`}
-          center={event.location}
-          radius={event.impact * 1000}
-          pathOptions={{
-            color: '#FF0000',
-            weight: 2,
-            opacity: 0.8,
-            fillOpacity: 0.3
-          }}
-        >
-          <Popup>
-            <div>
-              <strong>{event.event}</strong><br/>
-              Time: {event.timestamp.toLocaleString()}<br/>
-              Impact: {event.impact}%
-            </div>
-          </Popup>
-        </Circle>
-      ))}
-
-      {/* Data markers */}
-      {visualization.dataOverlays.markers.map((marker, index) => (
-        <Marker
-          key={`marker-${index}`}
-          position={marker.location}
-        >
-          <Popup>
-            <div>
-              <strong>Event Data</strong><br/>
-              {Object.entries(marker.data).map(([key, value]) => (
-                <div key={key}>{key}: {value}</div>
-              ))}
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-
       {/* Primary location marker */}
       <Marker position={visualization.primaryLocation.coordinates}>
         <Popup>
           <div>
             <strong>{visualization.primaryLocation.name}</strong><br/>
             Type: {visualization.primaryLocation.type}<br/>
-            Context: {visualization.primaryLocation.context}<br/>
-            Confidence: {Math.round(visualization.primaryLocation.confidence * 100)}%
+            Context: {visualization.primaryLocation.context}
           </div>
         </Popup>
       </Marker>

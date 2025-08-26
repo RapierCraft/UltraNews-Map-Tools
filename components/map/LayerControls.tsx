@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Settings2, Eye, EyeOff } from 'lucide-react';
+import { logger } from '@/lib/logger';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -55,7 +56,7 @@ export default function LayerControls({ onLayerChange, isDarkTheme = false }: La
     };
     setLayers(newLayers);
     onLayerChange?.(newLayers);
-    console.log('Layer toggled:', layerName, newLayers[layerName]);
+    logger.mapEvent('layer_toggled', { layer: layerName, enabled: newLayers[layerName] });
   };
 
   const resetToDefaults = () => {

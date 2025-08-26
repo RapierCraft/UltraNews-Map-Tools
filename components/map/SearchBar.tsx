@@ -16,7 +16,7 @@ interface SearchResult {
   osm_type?: string;
   osm_id?: number;
   boundingbox?: string[];
-  geojson?: any;
+  geojson?: GeoJSON.Geometry;
   class?: string;
 }
 
@@ -28,18 +28,6 @@ interface SearchBarProps {
 // Simple in-memory cache for search results
 const searchCache = new Map<string, { data: SearchResult[], timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
-// Popular locations for instant results
-const POPULAR_LOCATIONS = [
-  { display_name: 'India', lat: '20.593683', lon: '78.962883', type: 'country', importance: 0.9 },
-  { display_name: 'United States', lat: '39.7837304', lon: '-100.4458825', type: 'country', importance: 0.95 },
-  { display_name: 'China', lat: '35.0', lon: '103.0', type: 'country', importance: 0.9 },
-  { display_name: 'New York, United States', lat: '40.7127281', lon: '-74.0060152', type: 'city', importance: 0.8 },
-  { display_name: 'London, United Kingdom', lat: '51.5073219', lon: '-0.1276474', type: 'city', importance: 0.8 },
-  { display_name: 'Tokyo, Japan', lat: '35.6828387', lon: '139.7594549', type: 'city', importance: 0.8 },
-  { display_name: 'Paris, France', lat: '48.8588897', lon: '2.3200410217200766', type: 'city', importance: 0.8 },
-  { display_name: 'California, United States', lat: '36.7014631', lon: '-118.755997', type: 'state', importance: 0.7 }
-] as SearchResult[];
 
 export default function SearchBar({ onLocationSelect, className = '' }: SearchBarProps) {
   const [query, setQuery] = useState('');
@@ -133,10 +121,11 @@ export default function SearchBar({ onLocationSelect, className = '' }: SearchBa
       setResults(sortedData);
       setShowResults(true);
       setSelectedIndex(-1); // Reset selection when new results arrive
-    } catch (error: any) {
-      // Don't log abort errors
-      if (error.name !== 'AbortError') {
-        console.error('Search error:', error);
+    } catch (error: unknown) {
+      // Error handled silently
+      const err = error as Error;
+      if (err.name !== 'AbortError') {
+        // Error handled silently  
       }
       setResults([]);
     } finally {

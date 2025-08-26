@@ -38,7 +38,7 @@ export default function CustomTileLayer({
 
   useEffect(() => {
     // Generate CSS filters based on enabled layers
-    let filters: string[] = [];
+    const filters: string[] = [];
     
     // If certain layers are disabled, apply filters to hide them
     if (!layers.roads) {
@@ -95,7 +95,7 @@ export default function CustomTileLayer({
         style={{
           filter: cssFilter,
           transition: 'filter 0.3s ease-in-out'
-        } as any}
+        } as React.CSSProperties}
       />
       
       {/* Add style tag for CSS filters */}
