@@ -579,12 +579,13 @@ export default function DetailedNewsOverlay({ story, enabled, timelinePosition }
     })));
   };
 
+  // DISABLED: DetailedNewsOverlay should not be rendering pipelines
   if (!enabled || isLoading) return null;
 
   return (
     <>
-      {/* Pipeline/Infrastructure Lines */}
-      {flowLines.map((flow, index) => (
+      {/* Pipeline/Infrastructure Lines - COMPLETELY DISABLED */}
+      {/* {flowLines.map((flow, index) => (
         <Polyline
           key={`flow-${index}`}
           positions={flow.coordinates}
@@ -610,7 +611,7 @@ export default function DetailedNewsOverlay({ story, enabled, timelinePosition }
             </div>
           </Popup>
         </Polyline>
-      ))}
+      ))} */}
 
       {/* Impact Zones */}
       {impactZones.map((zone, index) => (

@@ -248,10 +248,10 @@ export default function IntelligentInfoOverlay({ storyId, enabled, timelinePosit
         <DataPanelOverlay key={index} panel={panel} map={map} />
       ))}
 
-      {/* Render flow lines */}
-      {flowLines.map((flow, index) => (
+      {/* Render flow lines - DISABLED: IntelligentInfoOverlay should not render pipeline lines */}
+      {/* {flowLines.map((flow, index) => (
         <FlowLineOverlay key={index} flow={flow} map={map} />
-      ))}
+      ))} */}
 
       {/* Render intelligent markers */}
       {markers.map((marker, index) => (
