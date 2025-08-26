@@ -5,6 +5,7 @@ import DynamicMap from './DynamicMap';
 import MapControls from './MapControls';
 import SearchBar from './SearchBar';
 import SimpleThemeToggle from '@/components/SimpleThemeToggle';
+import StoryAnalyzer from './StoryAnalyzer';
 import { Card } from '@/components/ui/card';
 
 interface Marker {
@@ -35,6 +36,14 @@ interface BorderSettings {
     city: boolean;
     district: boolean;
   };
+}
+
+interface NewsStory {
+  id: string;
+  headline: string;
+  content: string;
+  publishedAt: Date;
+  source: string;
 }
 
 interface LiveMapViewProps {
@@ -91,6 +100,9 @@ export default function LiveMapView({
     }
   });
   const [boundsToFit, setBoundsToFit] = useState<[[number, number], [number, number]] | undefined>();
+  const [currentStory, setCurrentStory] = useState<NewsStory | null>(null);
+  const [timelinePosition, setTimelinePosition] = useState(100);
+  const [isAnalyzingStory, setIsAnalyzingStory] = useState(false);
   const mapRef = useRef<any>(null);
 
   // Handle theme change from SimpleThemeToggle
@@ -232,10 +244,33 @@ export default function LiveMapView({
     setBorderSettings(settings);
   }, []);
 
+  const handleStoryAnalyze = useCallback((story: NewsStory) => {
+    console.log('Analyzing story:', story.headline);
+    setCurrentStory(story);
+    setIsAnalyzingStory(true);
+    
+    // Simulate analysis delay
+    setTimeout(() => {
+      setIsAnalyzingStory(false);
+    }, 2000);
+  }, []);
+
+  const handleTimelineChange = useCallback((position: number) => {
+    setTimelinePosition(position);
+  }, []);
+
   return (
     <div className="relative w-full h-full">
+      {/* Story Analyzer */}
+      <StoryAnalyzer
+        onStoryAnalyze={handleStoryAnalyze}
+        onTimelineChange={handleTimelineChange}
+        currentStory={currentStory}
+        isAnalyzing={isAnalyzingStory}
+      />
+
       {/* Top Bar with Search and Theme Toggle */}
-      <div className="absolute top-4 left-4 right-4 z-[1000] flex gap-4">
+      <div className="absolute top-4 left-[420px] right-4 z-[1000] flex gap-4">
         {/* Search Bar */}
         <div className="flex-1 max-w-md">
           <SearchBar onLocationSelect={handleLocationSelect} />
@@ -288,6 +323,8 @@ export default function LiveMapView({
         selectedLocation={selectedLocation}
         borderSettings={borderSettings}
         boundsToFit={boundsToFit}
+        newsStory={currentStory}
+        timelinePosition={timelinePosition}
         className="w-full h-full"
       />
     </div>

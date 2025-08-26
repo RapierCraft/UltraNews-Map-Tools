@@ -8,6 +8,7 @@ import ZoomControl from './ZoomControl';
 import MapController from './MapController';
 import FilterableOSMTiles from './FilterableOSMTiles';
 import BorderOverlay from './BorderOverlay';
+import ProperNewsOverlay from './ProperNewsOverlay';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -63,6 +64,14 @@ interface MapContainerProps {
     };
   };
   boundsToFit?: [[number, number], [number, number]];
+  newsStory?: {
+    id: string;
+    headline: string;
+    content: string;
+    publishedAt: Date;
+    source: string;
+  };
+  timelinePosition?: number;
 }
 
 const tileLayers: Record<string, { url: string; attribution: string; maxZoom?: number }> = {
@@ -174,7 +183,9 @@ export default function MapContainer({
       district: false
     }
   },
-  boundsToFit
+  boundsToFit,
+  newsStory,
+  timelinePosition = 100
 }: MapContainerProps) {
   const [isMounted, setIsMounted] = useState(false);
 
@@ -241,6 +252,15 @@ export default function MapContainer({
         enabled={borderSettings.enabled}
         borderTypes={borderSettings.types}
       />
+
+      {/* News Story overlay */}
+      {newsStory && (
+        <ProperNewsOverlay 
+          story={newsStory}
+          enabled={true}
+          timelinePosition={timelinePosition}
+        />
+      )}
       
       {/* Markers on top */}
       {markers.map((marker) => (

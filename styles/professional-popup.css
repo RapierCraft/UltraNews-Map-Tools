@@ -1,0 +1,307 @@
+/* Professional Popup Styling */
+.professional-popup .leaflet-popup-content-wrapper,
+.dynamic-popup .leaflet-popup-content-wrapper {
+  background: transparent !important;
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+  border-radius: 16px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+}
+
+.dark .professional-popup .leaflet-popup-content-wrapper,
+.dark .dynamic-popup .leaflet-popup-content-wrapper {
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Dynamic Popup Positioning */
+.dynamic-popup--left .leaflet-popup-content-wrapper {
+  transform-origin: right center;
+}
+
+.dynamic-popup--right .leaflet-popup-content-wrapper {
+  transform-origin: left center;
+}
+
+.dynamic-popup--top .leaflet-popup-content-wrapper {
+  transform-origin: center bottom;
+}
+
+.dynamic-popup--bottom .leaflet-popup-content-wrapper {
+  transform-origin: center top;
+}
+
+.dynamic-popup--center .leaflet-popup-content-wrapper {
+  transform-origin: center center;
+}
+
+/* Dynamic popup content */
+.dynamic-popup-content {
+  border-radius: 16px;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  display: flex;
+  flex-direction: column;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch; /* iOS smooth scrolling */
+}
+
+.dynamic-popup-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dynamic-popup-content::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  margin: 4px;
+}
+
+.dynamic-popup-content::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dynamic-popup-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.dark .dynamic-popup-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dark .dynamic-popup-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dark .dynamic-popup-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Ensure Leaflet doesn't override our scroll settings */
+.dynamic-popup .leaflet-popup-content {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.dynamic-popup .leaflet-popup-content-wrapper {
+  max-height: none !important;
+  height: auto !important;
+}
+
+.professional-popup .leaflet-popup-content,
+.dynamic-popup .leaflet-popup-content {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: auto !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+}
+
+.professional-popup .leaflet-popup-tip-container {
+  display: none !important;
+}
+
+.professional-popup .leaflet-popup-close-button {
+  display: none !important;
+}
+
+/* Popup animation */
+.professional-popup {
+  animation: popupFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes popupFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Enhanced POI Icons */
+.poi-marker {
+  transition: all 0.2s ease-in-out;
+}
+
+.poi-marker:hover {
+  transform: scale(1.1);
+  z-index: 1000;
+}
+
+/* Custom marker animations */
+@keyframes pulse-marker {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+/* High priority markers get pulse animation */
+.poi-marker.priority-high {
+  animation: pulse-marker 2s infinite;
+}
+
+/* Flow line animations */
+@keyframes flow-dash {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 40;
+  }
+}
+
+.animated-flow {
+  animation: flow-dash 2s linear infinite;
+}
+
+/* Definition Card Animations */
+@keyframes slideInFromTop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -100%) translateY(-10px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -100%) translateY(0) scale(1);
+  }
+}
+
+@keyframes slideOutToTop {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -100%) translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -100%) translateY(-10px) scale(0.95);
+  }
+}
+
+/* Definition card hover states */
+.definition-trigger {
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.definition-trigger:hover {
+  color: rgb(37 99 235) !important;
+  border-bottom-color: rgb(37 99 235) !important;
+}
+
+.dark .definition-trigger:hover {
+  color: rgb(147 197 253) !important;
+  border-bottom-color: rgb(147 197 253) !important;
+}
+
+/* Enhanced collapsible animations */
+@keyframes collapsibleSlideDown {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes collapsibleSlideUp {
+  from {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+[data-state="open"] {
+  animation: collapsibleSlideDown 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-state="closed"] {
+  animation: collapsibleSlideUp 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Wikipedia content section animations */
+.wiki-section {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.wiki-section:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.dark .wiki-section:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Tab content scrolling - Fixed height container with internal scrolling */
+[data-state="active"] {
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ensure proper flex layout for tabs */
+.dynamic-popup-content .w-full.h-full.flex.flex-col {
+  min-height: 0;
+  height: 100%;
+}
+
+/* Tab content scrollbars */
+.dynamic-popup-content [data-state="active"]::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dynamic-popup-content [data-state="active"]::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+  margin: 2px;
+}
+
+.dynamic-popup-content [data-state="active"]::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+}
+
+.dynamic-popup-content [data-state="active"]::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.dark .dynamic-popup-content [data-state="active"]::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dark .dynamic-popup-content [data-state="active"]::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.dark .dynamic-popup-content [data-state="active"]::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Ensure content inside tabs can scroll properly */
+.dynamic-popup-content [data-state="active"] > div {
+  padding-right: 8px;
+}
