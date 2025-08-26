@@ -27,6 +27,16 @@ interface LayerState {
   hillshading: boolean;
 }
 
+interface BorderSettings {
+  enabled: boolean;
+  types: {
+    country: boolean;
+    state: boolean;
+    city: boolean;
+    district: boolean;
+  };
+}
+
 interface LiveMapViewProps {
   initialCenter?: [number, number];
   initialZoom?: number;
@@ -60,6 +70,27 @@ export default function LiveMapView({
   const [currentLayer, setCurrentLayer] = useState('osm-standard');
   const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [dataLayers, setDataLayers] = useState<LayerState>(defaultDataLayers);
+  const [selectedLocation, setSelectedLocation] = useState<{ 
+    lat: number; 
+    lon: number; 
+    name: string;
+    osm_id?: number;
+    osm_type?: string;
+    boundingbox?: string[];
+    geojson?: any;
+    type?: string;
+    class?: string;
+  } | undefined>();
+  const [borderSettings, setBorderSettings] = useState<BorderSettings>({
+    enabled: true,
+    types: {
+      country: true,
+      state: true,
+      city: true,
+      district: false
+    }
+  });
+  const [boundsToFit, setBoundsToFit] = useState<[[number, number], [number, number]] | undefined>();
   const mapRef = useRef<any>(null);
 
   // Handle theme change from SimpleThemeToggle
@@ -129,18 +160,62 @@ export default function LiveMapView({
     }
   }, []);
 
-  const handleLocationSelect = useCallback((lat: number, lon: number, name: string) => {
+  const handleLocationSelect = useCallback((result: any) => {
+    const lat = parseFloat(result.lat);
+    const lon = parseFloat(result.lon);
     const newCenter: [number, number] = [lat, lon];
-    setCenter(newCenter);
-    setZoom(15);
+    
+    // Set selected location for border overlay with full result data
+    setSelectedLocation({ 
+      lat, 
+      lon, 
+      name: result.display_name,
+      osm_id: result.osm_id,
+      osm_type: result.osm_type,
+      boundingbox: result.boundingbox,
+      geojson: result.geojson,
+      type: result.type,
+      class: result.class
+    });
 
-    // Add search result marker
-    const searchMarker: Marker = {
-      id: 'search-result',
-      position: newCenter,
-      popup: name
-    };
-    setMarkers(prev => [...prev.filter(m => m.id !== 'search-result'), searchMarker]);
+    // Only add a marker for specific addresses (buildings, houses, etc.)
+    const shouldShowMarker = 
+      result.class === 'building' || 
+      result.class === 'amenity' ||
+      result.class === 'shop' ||
+      result.type === 'house' ||
+      result.type === 'address';
+
+    if (shouldShowMarker) {
+      const searchMarker: Marker = {
+        id: 'search-result',
+        position: newCenter,
+        popup: result.display_name
+      };
+      setMarkers(prev => [...prev.filter(m => m.id !== 'search-result'), searchMarker]);
+    } else {
+      // Remove the search marker if it exists
+      setMarkers(prev => prev.filter(m => m.id !== 'search-result'));
+    }
+
+    // Auto-zoom to fit bounds if available
+    if (result.boundingbox && result.boundingbox.length === 4) {
+      const bounds: [[number, number], [number, number]] = [
+        [parseFloat(result.boundingbox[0]), parseFloat(result.boundingbox[2])],
+        [parseFloat(result.boundingbox[1]), parseFloat(result.boundingbox[3])]
+      ];
+      
+      // Store bounds to be used by the map
+      setCenter(newCenter);
+      setZoom(15); // This will be overridden by fitBounds in MapController
+      
+      // We'll need to pass bounds to the map
+      setBoundsToFit(bounds);
+    } else {
+      setCenter(newCenter);
+      setZoom(15);
+      setBoundsToFit(undefined);
+    }
   }, []);
 
   const handleLayerChange = useCallback((layer: string) => {
@@ -150,6 +225,11 @@ export default function LiveMapView({
   const handleDataLayersChange = useCallback((layers: LayerState) => {
     console.log('Data layers changed:', layers);
     setDataLayers(layers);
+  }, []);
+
+  const handleBorderSettingsChange = useCallback((settings: BorderSettings) => {
+    console.log('Border settings changed:', settings);
+    setBorderSettings(settings);
   }, []);
 
   return (
@@ -191,8 +271,10 @@ export default function LiveMapView({
         onLocate={handleLocate}
         onLayerChange={handleLayerChange}
         onDataLayersChange={handleDataLayersChange}
+        onBorderSettingsChange={handleBorderSettingsChange}
         currentLayer={currentLayer}
         isDarkTheme={isDarkTheme}
+        borderSettings={borderSettings}
       />
 
       {/* Map */}
@@ -203,6 +285,9 @@ export default function LiveMapView({
         tileLayer={currentLayer}
         dataLayers={dataLayers}
         isDarkTheme={isDarkTheme}
+        selectedLocation={selectedLocation}
+        borderSettings={borderSettings}
+        boundsToFit={boundsToFit}
         className="w-full h-full"
       />
     </div>

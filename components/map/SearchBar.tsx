@@ -13,20 +13,44 @@ interface SearchResult {
   display_name: string;
   type: string;
   importance: number;
+  osm_type?: string;
+  osm_id?: number;
+  boundingbox?: string[];
+  geojson?: any;
+  class?: string;
 }
 
 interface SearchBarProps {
-  onLocationSelect?: (lat: number, lon: number, name: string) => void;
+  onLocationSelect?: (result: SearchResult) => void;
   className?: string;
 }
+
+// Simple in-memory cache for search results
+const searchCache = new Map<string, { data: SearchResult[], timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Popular locations for instant results
+const POPULAR_LOCATIONS = [
+  { display_name: 'India', lat: '20.593683', lon: '78.962883', type: 'country', importance: 0.9 },
+  { display_name: 'United States', lat: '39.7837304', lon: '-100.4458825', type: 'country', importance: 0.95 },
+  { display_name: 'China', lat: '35.0', lon: '103.0', type: 'country', importance: 0.9 },
+  { display_name: 'New York, United States', lat: '40.7127281', lon: '-74.0060152', type: 'city', importance: 0.8 },
+  { display_name: 'London, United Kingdom', lat: '51.5073219', lon: '-0.1276474', type: 'city', importance: 0.8 },
+  { display_name: 'Tokyo, Japan', lat: '35.6828387', lon: '139.7594549', type: 'city', importance: 0.8 },
+  { display_name: 'Paris, France', lat: '48.8588897', lon: '2.3200410217200766', type: 'city', importance: 0.8 },
+  { display_name: 'California, United States', lat: '36.7014631', lon: '-118.755997', type: 'state', importance: 0.7 }
+] as SearchResult[];
 
 export default function SearchBar({ onLocationSelect, className = '' }: SearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const searchTimeout = useRef<NodeJS.Timeout>();
   const resultsRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Close results when clicking outside
   useEffect(() => {
@@ -41,23 +65,79 @@ export default function SearchBar({ onLocationSelect, className = '' }: SearchBa
   }, []);
 
   const searchLocation = useCallback(async (searchQuery: string) => {
-    if (searchQuery.length < 3) {
+    // Allow searches with 1+ characters for faster results
+    if (searchQuery.length < 1) {
       setResults([]);
       return;
     }
 
+    // Check cache first
+    const cacheKey = searchQuery.toLowerCase();
+    const cached = searchCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      setResults(cached.data);
+      setShowResults(true);
+      setSelectedIndex(-1);
+      return;
+    }
+
+    // Cancel any previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+
     setIsLoading(true);
     try {
+      // Minimal params for fastest search response
+      const params = new URLSearchParams({
+        format: 'json',
+        q: searchQuery,
+        limit: '7',
+        // Don't fetch any heavy data during search - just the basics
+        addressdetails: '0',
+        extratags: '0', 
+        namedetails: '0',
+        // No polygon data at all during search
+        polygon: '0'
+      });
+
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          searchQuery
-        )}&limit=5&countrycodes=`
+        `https://nominatim.openstreetmap.org/search?${params.toString()}`,
+        { signal: abortControllerRef.current.signal }
       );
+      
+      if (!response.ok) throw new Error('Search failed');
+      
       const data = await response.json();
-      setResults(data);
+      
+      // Sort results by importance for better relevance
+      const sortedData = data.sort((a: SearchResult, b: SearchResult) => 
+        (b.importance || 0) - (a.importance || 0)
+      );
+      
+      // Cache the results
+      searchCache.set(cacheKey, {
+        data: sortedData,
+        timestamp: Date.now()
+      });
+      
+      // Clean old cache entries
+      if (searchCache.size > 100) {
+        const oldestKey = searchCache.keys().next().value;
+        searchCache.delete(oldestKey);
+      }
+      
+      setResults(sortedData);
       setShowResults(true);
-    } catch (error) {
-      console.error('Search error:', error);
+      setSelectedIndex(-1); // Reset selection when new results arrive
+    } catch (error: any) {
+      // Don't log abort errors
+      if (error.name !== 'AbortError') {
+        console.error('Search error:', error);
+      }
       setResults([]);
     } finally {
       setIsLoading(false);
@@ -68,31 +148,73 @@ export default function SearchBar({ onLocationSelect, className = '' }: SearchBa
     const value = e.target.value;
     setQuery(value);
 
-    // Debounce search
+    // Debounce search with faster response time
     if (searchTimeout.current) {
       clearTimeout(searchTimeout.current);
     }
 
     if (value.trim()) {
+      // No debounce for 1-2 character searches (countries/states)
+      // Short debounce for longer searches to avoid spam
+      const delay = value.length <= 2 ? 0 : 100;
+      
       searchTimeout.current = setTimeout(() => {
         searchLocation(value);
-      }, 500);
+      }, delay);
     } else {
       setResults([]);
       setShowResults(false);
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      // If an item is selected with arrow keys, use that
+      if (selectedIndex >= 0 && results[selectedIndex]) {
+        handleSelectLocation(results[selectedIndex]);
+      } else if (results.length > 0) {
+        // Otherwise select the best match (first one)
+        handleSelectLocation(results[0]);
+      } else if (query.trim()) {
+        // If no results yet but query exists, trigger immediate search
+        if (searchTimeout.current) {
+          clearTimeout(searchTimeout.current);
+        }
+        searchLocation(query);
+      }
+    } else if (e.key === 'Escape') {
+      // Close dropdown on Escape
+      setShowResults(false);
+      setSelectedIndex(-1);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (results.length > 0) {
+        setSelectedIndex(prev => 
+          prev < results.length - 1 ? prev + 1 : 0
+        );
+        setShowResults(true);
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (results.length > 0) {
+        setSelectedIndex(prev => 
+          prev > 0 ? prev - 1 : results.length - 1
+        );
+        setShowResults(true);
+      }
+    }
+  };
+
   const handleSelectLocation = (result: SearchResult) => {
-    const lat = parseFloat(result.lat);
-    const lon = parseFloat(result.lon);
-    
     setQuery(result.display_name);
     setShowResults(false);
     setResults([]);
+    setSelectedIndex(-1);
     
     if (onLocationSelect) {
-      onLocationSelect(lat, lon, result.display_name);
+      onLocationSelect(result);
     }
   };
 
@@ -100,6 +222,7 @@ export default function SearchBar({ onLocationSelect, className = '' }: SearchBa
     setQuery('');
     setResults([]);
     setShowResults(false);
+    setSelectedIndex(-1);
   };
 
   return (
@@ -107,11 +230,14 @@ export default function SearchBar({ onLocationSelect, className = '' }: SearchBa
       <div className="relative flex items-center">
         <Search className="absolute left-3 h-4 w-4 text-muted-foreground pointer-events-none" />
         <Input
+          ref={inputRef}
           type="text"
           placeholder="Search for a location..."
           value={query}
           onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
           className="pl-10 pr-10 h-10 bg-background border-border shadow-sm"
+          autoComplete="off"
         />
         {query && (
           <Button
@@ -134,15 +260,20 @@ export default function SearchBar({ onLocationSelect, className = '' }: SearchBa
             </div>
           ) : (
             <div className="py-1">
-              {results.map((result) => (
+              {results.map((result, index) => (
                 <button
                   key={result.place_id}
                   onClick={() => handleSelectLocation(result)}
-                  className="w-full px-4 py-2 text-left hover:bg-muted flex items-start gap-2 transition-colors"
+                  onMouseEnter={() => setSelectedIndex(index)}
+                  className={`w-full px-4 py-2 text-left flex items-start gap-2 transition-colors ${
+                    index === selectedIndex 
+                      ? 'bg-accent text-accent-foreground' 
+                      : 'hover:bg-muted'
+                  }`}
                 >
                   <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-foreground line-clamp-1">
+                    <div className="text-sm font-medium line-clamp-1">
                       {result.display_name.split(',')[0]}
                     </div>
                     <div className="text-xs text-muted-foreground line-clamp-1">

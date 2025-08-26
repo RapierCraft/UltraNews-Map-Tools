@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import ZoomControl from './ZoomControl';
 import MapController from './MapController';
 import FilterableOSMTiles from './FilterableOSMTiles';
+import BorderOverlay from './BorderOverlay';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -41,6 +42,27 @@ interface MapContainerProps {
   tileLayer?: string;
   dataLayers?: LayerState;
   isDarkTheme?: boolean;
+  selectedLocation?: {
+    lat: number;
+    lon: number;
+    name: string;
+    osm_id?: number;
+    osm_type?: string;
+    boundingbox?: string[];
+    geojson?: any;
+    type?: string;
+    class?: string;
+  };
+  borderSettings?: {
+    enabled: boolean;
+    types: {
+      country: boolean;
+      state: boolean;
+      city: boolean;
+      district: boolean;
+    };
+  };
+  boundsToFit?: [[number, number], [number, number]];
 }
 
 const tileLayers: Record<string, { url: string; attribution: string; maxZoom?: number }> = {
@@ -141,7 +163,18 @@ export default function MapContainer({
   style = {},
   tileLayer = 'osm-standard',
   dataLayers = defaultLayers,
-  isDarkTheme = false
+  isDarkTheme = false,
+  selectedLocation,
+  borderSettings = {
+    enabled: false,
+    types: {
+      country: true,
+      state: true,
+      city: true,
+      district: false
+    }
+  },
+  boundsToFit
 }: MapContainerProps) {
   const [isMounted, setIsMounted] = useState(false);
 
@@ -182,7 +215,7 @@ export default function MapContainer({
       maxBoundsViscosity={1.0}  // Strong resistance when hitting bounds
       zoomControl={false}  // Disable default zoom controls
     >
-      <MapController center={center} zoom={zoom} />
+      <MapController center={center} zoom={zoom} boundsToFit={boundsToFit} />
       <ZoomControl position="topright" />
       
       {/* Use filterable tiles for OSM themes, regular tiles for others */}
@@ -201,6 +234,13 @@ export default function MapContainer({
           zIndex={1}
         />
       )}
+      
+      {/* Border overlay */}
+      <BorderOverlay 
+        location={selectedLocation}
+        enabled={borderSettings.enabled}
+        borderTypes={borderSettings.types}
+      />
       
       {/* Markers on top */}
       {markers.map((marker) => (
