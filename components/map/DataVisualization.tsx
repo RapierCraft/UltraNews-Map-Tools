@@ -127,10 +127,19 @@ const analyzeTableForChart = (tableData: TableData): {
 
   // Check if data is suitable for visualization
   const hasNumericData = data.some(row => 
-    row.slice(1).some(cell => !isNaN(parseFloat(cell)) && isFinite(parseFloat(cell)))
+    row.slice(1).some(cell => {
+      // Remove common units and symbols, then check if numeric
+      const cleanCell = cell?.replace(/[°C°F%,\s]/g, '').replace(/[^\d.-]/g, '');
+      return cleanCell && !isNaN(parseFloat(cleanCell)) && isFinite(parseFloat(cleanCell));
+    })
   );
 
-  if (!hasNumericData || headers.length > 5 || data.length > 20) {
+  // More lenient criteria for climate/geographic data
+  const isClimateOrGeoData = headers.some(h => 
+    /month|temperature|rainfall|precipitation|humidity|climate|weather|elevation|population|year/i.test(h)
+  ) || tableData.caption?.toLowerCase().includes('climate');
+
+  if (!hasNumericData || (!isClimateOrGeoData && (headers.length > 5 || data.length > 20))) {
     return { chartType: 'table', data: [], config: {}, shouldVisualize: false };
   }
 
@@ -139,14 +148,33 @@ const analyzeTableForChart = (tableData: TableData): {
   const hasTimeData = headers[0]?.toLowerCase().includes('year') || 
                      headers[0]?.toLowerCase().includes('date') ||
                      data.some(row => /\d{4}/.test(row[0])); // Year pattern
+                     
+  // Check for month data (climate tables)
+  const hasMonthData = headers[0]?.toLowerCase().includes('month') ||
+                      data.some(row => /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(row[0]));
 
   // Convert data to chart format
-  const chartData: ChartData[] = data.slice(0, 10).map(row => {
+  const chartData: ChartData[] = data.slice(0, 15).map(row => {
     const item: ChartData = { name: row[0] || 'Unknown' };
     
     headers.slice(1).forEach((header, idx) => {
       const cellValue = row[idx + 1];
-      const numValue = parseFloat(cellValue?.replace(/[^\d.-]/g, '') || '0');
+      
+      // Enhanced numeric extraction for climate data
+      let numValue: number;
+      if (cellValue?.includes('°C') || cellValue?.includes('°F')) {
+        // Temperature data
+        numValue = parseFloat(cellValue.replace(/[°CF\s]/g, ''));
+      } else if (cellValue?.includes('%')) {
+        // Percentage data
+        numValue = parseFloat(cellValue.replace(/[%\s]/g, ''));
+      } else if (cellValue?.includes('mm')) {
+        // Precipitation data
+        numValue = parseFloat(cellValue.replace(/[mm\s]/g, ''));
+      } else {
+        // General numeric extraction
+        numValue = parseFloat(cellValue?.replace(/[^\d.-]/g, '') || '0');
+      }
       
       if (!isNaN(numValue) && isFinite(numValue)) {
         item[header] = numValue;
@@ -164,7 +192,10 @@ const analyzeTableForChart = (tableData: TableData): {
     }
     
     return item;
-  }).filter(item => Object.keys(item).length > 1);
+  }).filter(item => {
+    // Ensure at least one numeric value exists
+    return Object.entries(item).some(([key, val]) => key !== 'name' && typeof val === 'number');
+  });
 
   // Create chart config
   const config: any = {};
@@ -178,14 +209,29 @@ const analyzeTableForChart = (tableData: TableData): {
   // Determine chart type
   let chartType: 'bar' | 'line' | 'pie' | 'table' = 'bar';
   
-  if (hasTimeData && chartData.length > 3) {
-    chartType = 'line';
+  // Climate data gets special treatment
+  if (isClimateOrGeoData && (hasTimeData || hasMonthData) && chartData.length >= 3) {
+    chartType = 'line'; // Climate time series (monthly/yearly data)
+  } else if ((hasTimeData || hasMonthData) && chartData.length > 3) {
+    chartType = 'line'; // General time series
   } else if (headers.length === 2 && firstColumnIsCategory && chartData.length <= 8) {
     chartType = 'pie';
-  } else if (headers.length <= 4 && chartData.length <= 12) {
+  } else if (headers.length <= 8 && chartData.length <= 20) { // Very lenient for all data
     chartType = 'bar';
   } else {
     chartType = 'table';
+  }
+
+  // Debug logging for climate table detection
+  if (tableData.caption?.toLowerCase().includes('climate') || headers.some(h => /temperature|rainfall|month/i.test(h))) {
+    console.log('Climate table detected:', {
+      caption: tableData.caption,
+      headers,
+      hasNumericData,
+      chartDataLength: chartData.length,
+      chartType,
+      shouldVisualize: chartData.length > 0 && hasNumericData
+    });
   }
 
   return {
@@ -271,10 +317,16 @@ export default function DataVisualization({ tableData, index }: DataVisualizatio
       case 'line':
         return (
           <ChartContainer config={config} className="h-[300px]">
-            <LineChart data={data}>
+            <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
+              <XAxis 
+                dataKey="name" 
+                tick={{ fontSize: 12 }}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis tick={{ fontSize: 12 }} />
               <ChartTooltip content={<ChartTooltipContent />} />
               <ChartLegend content={<ChartLegendContent />} />
               {Object.keys(config).map((key, idx) => (
@@ -285,6 +337,7 @@ export default function DataVisualization({ tableData, index }: DataVisualizatio
                   stroke={config[key].color}
                   strokeWidth={2}
                   dot={{ fill: config[key].color, strokeWidth: 2, r: 4 }}
+                  connectNulls={false}
                 />
               ))}
             </LineChart>
