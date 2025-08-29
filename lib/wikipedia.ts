@@ -36,6 +36,27 @@ export class WikipediaAPI {
   private static baseURL = 'https://en.wikipedia.org/api/rest_v1';
   private static apiURL = 'https://en.wikipedia.org/w/api.php';
 
+  static async getFullArticle(title: string): Promise<{title: string; content: string; url: string} | null> {
+    try {
+      const response = await fetch(
+        `${this.baseURL}/page/html/${encodeURIComponent(title)}`
+      );
+      
+      if (!response.ok) return null;
+      
+      const htmlContent = await response.text();
+      
+      return {
+        title,
+        content: htmlContent,
+        url: `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`
+      };
+    } catch (error) {
+      console.error('Error fetching full article:', error);
+      return null;
+    }
+  }
+
   static async getPageSummary(title: string): Promise<WikipediaPage | null> {
     try {
       // Get page summary

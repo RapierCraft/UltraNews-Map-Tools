@@ -4,6 +4,7 @@ import "./globals.css";
 import "../styles/professional-popup.css";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { ModalStackProvider } from "@/components/map/ModalStack";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,7 +38,9 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            {children}
+            <ModalStackProvider>
+              {children}
+            </ModalStackProvider>
           </ThemeProvider>
         </ErrorBoundary>
       </body>

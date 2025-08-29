@@ -1,9 +1,9 @@
-import LiveMapView from '@/components/map/LiveMapView';
+import BasicMap from '@/components/map/BasicMap';
 
 export default function Home() {
   return (
     <div className="w-screen h-screen relative">
-      <LiveMapView />
+      <BasicMap />
     </div>
   );
 }

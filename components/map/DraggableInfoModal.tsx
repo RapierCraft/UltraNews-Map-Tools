@@ -11,6 +11,7 @@ import { useTheme } from 'next-themes';
 interface DraggableInfoModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onExpand?: () => void;
   title: string;
   children: React.ReactNode;
   sourceElement?: HTMLElement | null;
@@ -21,6 +22,7 @@ interface DraggableInfoModalProps {
 export default function DraggableInfoModal({
   isOpen,
   onClose,
+  onExpand,
   title,
   children,
   sourceElement,
@@ -126,14 +128,20 @@ export default function DraggableInfoModal({
     document.addEventListener('mouseup', handleMouseUp);
   };
 
-  const toggleMaximize = () => {
-    if (!isMaximized) {
-      originalPosRef.current = position;
-      setPosition({ x: 50, y: 50 });
+  const handleExpandClick = () => {
+    if (onExpand) {
+      // Use expand functionality if provided
+      onExpand();
     } else {
-      setPosition(originalPosRef.current);
+      // Fallback to maximize behavior
+      if (!isMaximized) {
+        originalPosRef.current = position;
+        setPosition({ x: 50, y: 50 });
+      } else {
+        setPosition(originalPosRef.current);
+      }
+      setIsMaximized(!isMaximized);
     }
-    setIsMaximized(!isMaximized);
   };
 
   if (!isOpen) return null;
@@ -302,7 +310,8 @@ export default function DraggableInfoModal({
                   variant="ghost"
                   size="sm"
                   className="h-6 w-6 p-0"
-                  onClick={toggleMaximize}
+                  onClick={handleExpandClick}
+                  title={onExpand ? "Expand to full article" : "Maximize modal"}
                 >
                   {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                 </Button>

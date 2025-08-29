@@ -198,7 +198,7 @@ export default function EnhancedWikipediaContent({ topic, wikiData }: EnhancedWi
         </div>
         <Badge variant="secondary" className="w-fit text-xs">
           <Globe className="w-3 h-3 mr-1" />
-          Enhanced Wikipedia Content
+          Enhanced Content
         </Badge>
       </CardHeader>
 
