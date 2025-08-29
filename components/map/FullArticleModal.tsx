@@ -324,8 +324,8 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
 
         {/* Content */}
         <CardContent className="flex-1 min-h-0 p-0">
-          <ScrollArea className="h-full">
-            <div className="p-6">
+          <ScrollArea className="h-full w-full">
+            <div className="p-6 max-w-full overflow-hidden">
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center space-y-4">
@@ -342,7 +342,7 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
                   </p>
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-6 max-w-full overflow-hidden">
                   {/* Article Title */}
                   <h1 className={`text-3xl font-bold mb-6 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                     {articleData?.title}
@@ -387,7 +387,7 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
                     {articleData?.structured ? (
                       <div className="space-y-8">
                         {/* Introduction */}
-                        <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} break-words max-w-full`}>
                           {enhanceTextWithDefinitionCards(articleData.structured.paragraphs.slice(0, 2).join('\n\n'))}
                         </div>
 
@@ -400,7 +400,7 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
                               </h4>
                             )}
                             <div className="overflow-x-auto max-w-full">
-                              <table className={`min-w-full border-collapse ${isDark ? 'border-gray-600' : 'border-gray-300'} border rounded-lg overflow-hidden`}>
+                              <table className={`w-full table-fixed border-collapse ${isDark ? 'border-gray-600' : 'border-gray-300'} border rounded-lg overflow-hidden`}>
                                 {table.headers.length > 0 && (
                                   <thead>
                                     <tr className={isDark ? 'bg-gray-800' : 'bg-gray-50'}>
@@ -457,7 +457,7 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
                                 )}
                                 
                                 {/* Section Content */}
-                                <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} space-y-3`}>
+                                <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} space-y-3 break-words max-w-full`}>
                                   {sectionParagraphs.slice(0, 3).map((paragraph, pIdx) => (
                                     <div key={pIdx}>
                                       {enhanceTextWithDefinitionCards(paragraph)}
@@ -474,17 +474,17 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
                         {articleData.structured.lists.slice(0, 3).map((list: any, idx: number) => (
                           <div key={idx} className="space-y-2">
                             {list.type === 'ul' ? (
-                              <ul className={`list-disc list-inside space-y-1 ${isDark ? 'text-gray-300' : 'text-gray-700'} border-l-2 ${isDark ? 'border-gray-600' : 'border-gray-300'} pl-4`}>
+                              <ul className={`list-disc list-inside space-y-1 ${isDark ? 'text-gray-300' : 'text-gray-700'} border-l-2 ${isDark ? 'border-gray-600' : 'border-gray-300'} pl-4 break-words`}>
                                 {list.items.slice(0, 5).map((item: string, itemIdx: number) => (
-                                  <li key={itemIdx} className="text-sm">
+                                  <li key={itemIdx} className="text-sm break-words">
                                     {enhanceTextWithDefinitionCards(item)}
                                   </li>
                                 ))}
                               </ul>
                             ) : (
-                              <ol className={`list-decimal list-inside space-y-1 ${isDark ? 'text-gray-300' : 'text-gray-700'} border-l-2 ${isDark ? 'border-gray-600' : 'border-gray-300'} pl-4`}>
+                              <ol className={`list-decimal list-inside space-y-1 ${isDark ? 'text-gray-300' : 'text-gray-700'} border-l-2 ${isDark ? 'border-gray-600' : 'border-gray-300'} pl-4 break-words`}>
                                 {list.items.slice(0, 5).map((item: string, itemIdx: number) => (
-                                  <li key={itemIdx} className="text-sm">
+                                  <li key={itemIdx} className="text-sm break-words">
                                     {enhanceTextWithDefinitionCards(item)}
                                   </li>
                                 ))}
@@ -495,7 +495,7 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
                       </div>
                     ) : (
                       /* Fallback for summary content */
-                      <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} space-y-4`}>
+                      <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} space-y-4 break-words max-w-full`}>
                         {enhanceTextWithDefinitionCards(articleData?.extract || 'No content available')}
                       </div>
                     )}
