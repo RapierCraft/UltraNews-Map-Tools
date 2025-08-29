@@ -233,28 +233,49 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
           // Get main content
           const content = doc.querySelector('.mw-parser-output') || doc.querySelector('body');
           
-          // Extract structured content
-          const structuredContent = {
-            paragraphs: Array.from(content?.querySelectorAll('p') || []).map(p => p.textContent || '').filter(text => text.trim().length > 50),
-            headings: Array.from(content?.querySelectorAll('h1, h2, h3, h4, h5, h6') || []).map(h => ({
-              level: parseInt(h.tagName.charAt(1)),
-              text: h.textContent || '',
-              id: h.id || ''
-            })),
-            tables: Array.from(content?.querySelectorAll('table:not(.navbox)') || []).map(table => {
-              const rows = Array.from(table.querySelectorAll('tr'));
-              return {
-                caption: table.querySelector('caption')?.textContent || '',
-                headers: Array.from(rows[0]?.querySelectorAll('th') || []).map(th => th.textContent || ''),
-                data: rows.slice(1).map(row => 
-                  Array.from(row.querySelectorAll('td, th')).map(cell => cell.textContent || '')
-                ).filter(row => row.length > 0)
+          // Extract real Wikipedia sections with their content
+          const sections = [];
+          const allElements = Array.from(content?.children || []);
+          let currentSection = { heading: '', content: [], level: 0 };
+          
+          allElements.forEach(element => {
+            if (element.tagName.match(/^H[2-6]$/)) {
+              // Save previous section if it has content
+              if (currentSection.heading && currentSection.content.length > 0) {
+                sections.push({ ...currentSection });
+              }
+              
+              // Start new section
+              currentSection = {
+                heading: element.textContent || '',
+                content: [],
+                level: parseInt(element.tagName.charAt(1))
               };
-            }).filter(table => table.headers.length > 0 || table.data.length > 0),
-            lists: Array.from(content?.querySelectorAll('ul, ol') || []).map(list => ({
-              type: list.tagName.toLowerCase(),
-              items: Array.from(list.querySelectorAll('li')).map(li => li.textContent || '').filter(text => text.trim())
-            })).filter(list => list.items.length > 0)
+            } else if (element.tagName === 'P' && element.textContent && element.textContent.trim().length > 30) {
+              // Add paragraph to current section
+              currentSection.content.push({
+                type: 'paragraph',
+                content: element.textContent
+              });
+            } else if (element.tagName === 'UL' || element.tagName === 'OL') {
+              // Add list to current section
+              const listItems = Array.from(element.querySelectorAll('li')).map(li => li.textContent || '').filter(text => text.trim());
+              if (listItems.length > 0) {
+                currentSection.content.push({
+                  type: element.tagName.toLowerCase(),
+                  items: listItems
+                });
+              }
+            }
+          });
+          
+          // Add final section
+          if (currentSection.heading && currentSection.content.length > 0) {
+            sections.push(currentSection);
+          }
+          
+          const structuredContent = {
+            sections: sections.filter(s => s.heading && s.content.length > 0)
           };
           
           // Get summary for images and metadata
@@ -262,7 +283,7 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
           
           setArticleData({
             title: fullArticle.title,
-            extract: structuredContent.paragraphs.slice(0, 10).join('\n\n'), // First 10 paragraphs
+            extract: summary?.extract || 'Loading content...',
             structured: structuredContent,
             url: fullArticle.url,
             images: summary?.images || [],
@@ -392,8 +413,8 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
                           {enhanceTextWithDefinitionCards(articleData.structured.paragraphs.slice(0, 2).join('\n\n'))}
                         </div>
 
-                        {/* Interactive Data Visualizations */}
-                        {articleData.structured.tables.map((table: any, idx: number) => (
+                        {/* Interactive Data Visualizations - Disabled temporarily */}
+                        {/* {articleData.structured.tables.map((table: any, idx: number) => (
                           <DataVisualization
                             key={idx}
                             tableData={{
@@ -403,7 +424,7 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
                             }}
                             index={idx}
                           />
-                        ))}
+                        ))} */}
 
                         {/* Content Sections with Headings */}
                         {articleData.structured.headings.map((heading: any, idx: number) => {

@@ -465,8 +465,8 @@ export default function EnhancedWikipediaContent({ topic, wikiData }: EnhancedWi
           <div className="space-y-3">
             <Separator className={isDark ? 'bg-gray-700' : 'bg-gray-200'} />
             
-            {/* Tables */}
-            {structuredContent.tables.length > 0 && (
+            {/* Tables - Disabled temporarily */}
+            {/* {structuredContent.tables.length > 0 && (
               <Collapsible 
                 open={expandedSections.has('tables')} 
                 onOpenChange={() => toggleSection('tables')}
@@ -498,7 +498,7 @@ export default function EnhancedWikipediaContent({ topic, wikiData }: EnhancedWi
                   ))}
                 </CollapsibleContent>
               </Collapsible>
-            )}
+            )} */}
             
             {/* Lists */}
             {structuredContent.lists.length > 0 && (
