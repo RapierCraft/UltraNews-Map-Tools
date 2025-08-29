@@ -208,11 +208,76 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
       setError('');
       
       try {
-        const article = await WikipediaAPI.getPageSummary(title);
-        if (article) {
-          setArticleData(article);
+        // Try to get full article content first
+        const fullArticle = await WikipediaAPI.getFullArticle(title);
+        if (fullArticle && fullArticle.content) {
+          // Parse HTML to extract structured content
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(fullArticle.content, 'text/html');
+          
+          // Remove unwanted elements but keep tables and structured content
+          const unwantedSelectors = [
+            '.navbox', '.ambox', '.hatnote', '.dablink',
+            '.coordinates', '.geo-dec', '.geo-dms', '.metadata',
+            'table.navbox', 'div.navbox', '.sidebar', '.vertical-navbox',
+            '.reflist', '.references', 'ol.references', '.reference',
+            'sup.reference', '.citation', '.cite', '.noprint',
+            'style', 'script', '.mw-editsection', '.edit-pencil'
+          ];
+          
+          unwantedSelectors.forEach(selector => {
+            doc.querySelectorAll(selector).forEach(el => el.remove());
+          });
+          
+          // Get main content
+          const content = doc.querySelector('.mw-parser-output') || doc.querySelector('body');
+          
+          // Extract structured content
+          const structuredContent = {
+            paragraphs: Array.from(content?.querySelectorAll('p') || []).map(p => p.textContent || '').filter(text => text.trim().length > 50),
+            headings: Array.from(content?.querySelectorAll('h1, h2, h3, h4, h5, h6') || []).map(h => ({
+              level: parseInt(h.tagName.charAt(1)),
+              text: h.textContent || '',
+              id: h.id || ''
+            })),
+            tables: Array.from(content?.querySelectorAll('table:not(.navbox)') || []).map(table => {
+              const rows = Array.from(table.querySelectorAll('tr'));
+              return {
+                caption: table.querySelector('caption')?.textContent || '',
+                headers: Array.from(rows[0]?.querySelectorAll('th') || []).map(th => th.textContent || ''),
+                data: rows.slice(1).map(row => 
+                  Array.from(row.querySelectorAll('td, th')).map(cell => cell.textContent || '')
+                ).filter(row => row.length > 0)
+              };
+            }).filter(table => table.headers.length > 0 || table.data.length > 0),
+            lists: Array.from(content?.querySelectorAll('ul, ol') || []).map(list => ({
+              type: list.tagName.toLowerCase(),
+              items: Array.from(list.querySelectorAll('li')).map(li => li.textContent || '').filter(text => text.trim())
+            })).filter(list => list.items.length > 0)
+          };
+          
+          // Get summary for images and metadata
+          const summary = await WikipediaAPI.getPageSummary(title);
+          
+          setArticleData({
+            title: fullArticle.title,
+            extract: structuredContent.paragraphs.slice(0, 10).join('\n\n'), // First 10 paragraphs
+            structured: structuredContent,
+            url: fullArticle.url,
+            images: summary?.images || [],
+            isFullArticle: true
+          });
         } else {
-          setError('Article not found');
+          // Fallback to summary if full article fails
+          const summary = await WikipediaAPI.getPageSummary(title);
+          if (summary) {
+            setArticleData({
+              ...summary,
+              isFullArticle: false
+            });
+          } else {
+            setError('Article not found');
+          }
         }
       } catch (err) {
         console.error('Failed to fetch article:', err);
@@ -304,9 +369,136 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
                     </div>
                   )}
                   
-                  {/* Enhanced Article Content with DefinitionCards */}
-                  <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} space-y-4`}>
-                    {articleData?.extract ? enhanceTextWithDefinitionCards(articleData.extract) : 'No content available'}
+                  {/* Enhanced Article Content with Structure */}
+                  <div className="space-y-6">
+                    <div className="mb-4">
+                      {articleData?.isFullArticle ? (
+                        <span className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-green-900/30 text-green-300' : 'bg-green-100 text-green-700'}`}>
+                          Full Article Content
+                        </span>
+                      ) : (
+                        <span className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-blue-900/30 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                          Summary Content
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Structured Content */}
+                    {articleData?.structured ? (
+                      <div className="space-y-8">
+                        {/* Introduction */}
+                        <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                          {enhanceTextWithDefinitionCards(articleData.structured.paragraphs.slice(0, 2).join('\n\n'))}
+                        </div>
+
+                        {/* Tables */}
+                        {articleData.structured.tables.map((table: any, idx: number) => (
+                          <div key={idx} className="space-y-3">
+                            {table.caption && (
+                              <h4 className={`text-lg font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                                {table.caption}
+                              </h4>
+                            )}
+                            <div className="overflow-x-auto">
+                              <table className={`w-full border-collapse ${isDark ? 'border-gray-600' : 'border-gray-300'} border rounded-lg overflow-hidden`}>
+                                {table.headers.length > 0 && (
+                                  <thead>
+                                    <tr className={isDark ? 'bg-gray-800' : 'bg-gray-50'}>
+                                      {table.headers.map((header: string, headerIdx: number) => (
+                                        <th key={headerIdx} className={`border ${isDark ? 'border-gray-600' : 'border-gray-300'} px-4 py-2 text-left font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                                          {header}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                )}
+                                <tbody>
+                                  {table.data.slice(0, 10).map((row: string[], rowIdx: number) => (
+                                    <tr key={rowIdx} className={`${rowIdx % 2 === 0 ? (isDark ? 'bg-gray-900/30' : 'bg-white') : (isDark ? 'bg-gray-800/30' : 'bg-gray-50/50')}`}>
+                                      {row.map((cell: string, cellIdx: number) => (
+                                        <td key={cellIdx} className={`border ${isDark ? 'border-gray-600' : 'border-gray-300'} px-4 py-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                          {enhanceTextWithDefinitionCards(cell)}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Content Sections with Headings */}
+                        {articleData.structured.headings.map((heading: any, idx: number) => {
+                          const sectionStart = idx;
+                          const nextHeadingIdx = articleData.structured.headings.findIndex((h: any, i: number) => i > idx && h.level <= heading.level);
+                          const sectionEnd = nextHeadingIdx === -1 ? articleData.structured.paragraphs.length : nextHeadingIdx + 5;
+                          
+                          const sectionParagraphs = articleData.structured.paragraphs.slice(sectionStart + 2, sectionEnd);
+                          
+                          if (heading.level <= 3 && sectionParagraphs.length > 0) {
+                            return (
+                              <div key={idx} className="space-y-4">
+                                {/* Section Heading */}
+                                {heading.level === 2 && (
+                                  <h2 className={`text-2xl font-bold border-b-2 pb-2 ${isDark ? 'text-gray-100 border-blue-600' : 'text-gray-900 border-blue-400'}`}>
+                                    {heading.text}
+                                  </h2>
+                                )}
+                                {heading.level === 3 && (
+                                  <h3 className={`text-xl font-semibold border-l-4 pl-3 ${isDark ? 'text-gray-200 border-blue-500' : 'text-gray-800 border-blue-400'}`}>
+                                    {heading.text}
+                                  </h3>
+                                )}
+                                {heading.level === 4 && (
+                                  <h4 className={`text-lg font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                    {heading.text}
+                                  </h4>
+                                )}
+                                
+                                {/* Section Content */}
+                                <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} space-y-3`}>
+                                  {sectionParagraphs.slice(0, 3).map((paragraph, pIdx) => (
+                                    <div key={pIdx}>
+                                      {enhanceTextWithDefinitionCards(paragraph)}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
+
+                        {/* Lists */}
+                        {articleData.structured.lists.slice(0, 3).map((list: any, idx: number) => (
+                          <div key={idx} className="space-y-2">
+                            {list.type === 'ul' ? (
+                              <ul className={`list-disc list-inside space-y-1 ${isDark ? 'text-gray-300' : 'text-gray-700'} border-l-2 ${isDark ? 'border-gray-600' : 'border-gray-300'} pl-4`}>
+                                {list.items.slice(0, 5).map((item: string, itemIdx: number) => (
+                                  <li key={itemIdx} className="text-sm">
+                                    {enhanceTextWithDefinitionCards(item)}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <ol className={`list-decimal list-inside space-y-1 ${isDark ? 'text-gray-300' : 'text-gray-700'} border-l-2 ${isDark ? 'border-gray-600' : 'border-gray-300'} pl-4`}>
+                                {list.items.slice(0, 5).map((item: string, itemIdx: number) => (
+                                  <li key={itemIdx} className="text-sm">
+                                    {enhanceTextWithDefinitionCards(item)}
+                                  </li>
+                                ))}
+                              </ol>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      /* Fallback for summary content */
+                      <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} space-y-4`}>
+                        {enhanceTextWithDefinitionCards(articleData?.extract || 'No content available')}
+                      </div>
+                    )}
                   </div>
                   
                   {/* Images */}

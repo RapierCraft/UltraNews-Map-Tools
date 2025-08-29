@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,9 +18,12 @@ import {
   Globe,
   Users,
   DollarSign,
-  Activity
+  Activity,
+  Table,
+  List
 } from 'lucide-react';
 import DefinitionCard from './DefinitionCard';
+import { WikipediaAPI } from '@/lib/wikipedia';
 
 interface WikipediaData {
   title: string;
@@ -32,6 +35,13 @@ interface WikipediaData {
 interface EnhancedWikipediaContentProps {
   topic: string;
   wikiData: WikipediaData;
+}
+
+interface StructuredContent {
+  headings: { level: number; text: string; id: string }[];
+  tables: { headers: string[]; rows: string[][] }[];
+  lists: { type: 'ordered' | 'unordered'; items: string[] }[];
+  paragraphs: string[];
 }
 
 // Terms that should have definition cards
@@ -125,6 +135,54 @@ const enhanceTextWithLinks = (text: string): React.ReactNode => {
   return result;
 };
 
+const parseStructuredContent = (htmlContent: string): StructuredContent => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const content = doc.querySelector('.mw-parser-output');
+  
+  if (!content) {
+    return { headings: [], tables: [], lists: [], paragraphs: [] };
+  }
+
+  // Extract headings
+  const headingElements = Array.from(content.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+  const headings = headingElements.map((h, index) => ({
+    level: parseInt(h.tagName.charAt(1)),
+    text: h.textContent?.trim() || '',
+    id: `heading-${index}`
+  })).filter(h => h.text);
+
+  // Extract tables (excluding navboxes)
+  const tableElements = Array.from(content.querySelectorAll('table:not(.navbox):not(.infobox):not(.ambox)'));
+  const tables = tableElements.map(table => {
+    const headerRow = table.querySelector('thead tr, tr:first-child');
+    const headers = headerRow ? Array.from(headerRow.querySelectorAll('th, td')).map(th => th.textContent?.trim() || '') : [];
+    
+    const bodyRows = Array.from(table.querySelectorAll('tbody tr, tr:not(:first-child)'));
+    const rows = bodyRows.slice(0, 10).map(row => 
+      Array.from(row.querySelectorAll('td, th')).map(cell => cell.textContent?.trim() || '')
+    ).filter(row => row.some(cell => cell));
+    
+    return { headers, rows };
+  }).filter(t => t.rows.length > 0);
+
+  // Extract lists
+  const listElements = Array.from(content.querySelectorAll('ul:not(.navbox ul):not(.infobox ul), ol:not(.navbox ol):not(.infobox ol)'));
+  const lists = listElements.slice(0, 3).map(list => ({
+    type: list.tagName.toLowerCase() === 'ol' ? 'ordered' as const : 'unordered' as const,
+    items: Array.from(list.querySelectorAll('li')).slice(0, 8).map(li => li.textContent?.trim() || '').filter(Boolean)
+  })).filter(l => l.items.length > 0);
+
+  // Extract paragraphs
+  const paragraphElements = Array.from(content.querySelectorAll('p'));
+  const paragraphs = paragraphElements
+    .map(p => p.textContent?.trim() || '')
+    .filter(p => p.length > 50)
+    .slice(0, 5);
+
+  return { headings, tables, lists, paragraphs };
+};
+
 const extractStructuredInfo = (extract: string, topic: string) => {
   const sections = {
     overview: '',
@@ -162,10 +220,42 @@ const extractStructuredInfo = (extract: string, topic: string) => {
 
 export default function EnhancedWikipediaContent({ topic, wikiData }: EnhancedWikipediaContentProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['overview']));
+  const [structuredContent, setStructuredContent] = useState<StructuredContent | null>(null);
+  const [isLoadingStructured, setIsLoadingStructured] = useState(false);
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   
   const sections = extractStructuredInfo(wikiData.extract, topic);
+  
+  // Check if we should fetch structured content
+  useEffect(() => {
+    const shouldFetchStructured = () => {
+      const extractLength = wikiData.extract.length;
+      const hasComplexContent = /\d+.*?(population|area|elevation|established|founded|built)/.test(wikiData.extract.toLowerCase());
+      return extractLength > 500 && hasComplexContent;
+    };
+    
+    if (shouldFetchStructured()) {
+      const fetchStructuredContent = async () => {
+        setIsLoadingStructured(true);
+        try {
+          const fullArticle = await WikipediaAPI.getFullArticle(topic);
+          if (fullArticle) {
+            const parsed = parseStructuredContent(fullArticle.content);
+            if (parsed.tables.length > 0 || parsed.headings.length > 3) {
+              setStructuredContent(parsed);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch structured content:', error);
+        } finally {
+          setIsLoadingStructured(false);
+        }
+      };
+      
+      fetchStructuredContent();
+    }
+  }, [topic, wikiData.extract]);
   
   const toggleSection = (sectionId: string) => {
     const newExpanded = new Set(expandedSections);
@@ -360,6 +450,123 @@ export default function EnhancedWikipediaContent({ topic, wikiData }: EnhancedWi
             </>
           )}
         </div>
+
+        {/* Structured Content - Tables and Additional Info */}
+        {isLoadingStructured && (
+          <div className="space-y-2">
+            <Separator className={isDark ? 'bg-gray-700' : 'bg-gray-200'} />
+            <div className={`h-4 w-32 rounded animate-pulse ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+            <div className={`h-20 rounded animate-pulse ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+          </div>
+        )}
+        
+        {structuredContent && (
+          <div className="space-y-3">
+            <Separator className={isDark ? 'bg-gray-700' : 'bg-gray-200'} />
+            
+            {/* Tables */}
+            {structuredContent.tables.length > 0 && (
+              <Collapsible 
+                open={expandedSections.has('tables')} 
+                onOpenChange={() => toggleSection('tables')}
+              >
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-between p-0 h-auto">
+                    <div className="flex items-center gap-2">
+                      <Table className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                        Data Tables ({structuredContent.tables.length})
+                      </span>
+                    </div>
+                    {expandedSections.has('tables') ? 
+                      <ChevronUp className="w-4 h-4" /> : 
+                      <ChevronDown className="w-4 h-4" />
+                    }
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 space-y-3">
+                  {structuredContent.tables.slice(0, 2).map((table, idx) => (
+                    <div key={idx} className={`overflow-x-auto rounded border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <table className="min-w-full text-xs">
+                        {table.headers.length > 0 && (
+                          <thead className={`${isDark ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                            <tr>
+                              {table.headers.map((header, hidx) => (
+                                <th key={hidx} className={`px-2 py-1 text-left font-medium ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                  {enhanceTextWithLinks(header)}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                        )}
+                        <tbody>
+                          {table.rows.slice(0, 5).map((row, ridx) => (
+                            <tr key={ridx} className={`${ridx % 2 === 0 ? (isDark ? 'bg-gray-900/20' : 'bg-white') : (isDark ? 'bg-gray-800/40' : 'bg-gray-50/50')}`}>
+                              {row.map((cell, cidx) => (
+                                <td key={cidx} className={`px-2 py-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                  {enhanceTextWithLinks(cell)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+            
+            {/* Lists */}
+            {structuredContent.lists.length > 0 && (
+              <>
+                <Separator className={isDark ? 'bg-gray-700' : 'bg-gray-200'} />
+                <Collapsible 
+                  open={expandedSections.has('lists')} 
+                  onOpenChange={() => toggleSection('lists')}
+                >
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" className="w-full justify-between p-0 h-auto">
+                      <div className="flex items-center gap-2">
+                        <List className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                          Key Information ({structuredContent.lists.length})
+                        </span>
+                      </div>
+                      {expandedSections.has('lists') ? 
+                        <ChevronUp className="w-4 h-4" /> : 
+                        <ChevronDown className="w-4 h-4" />
+                      }
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-2 space-y-2">
+                    {structuredContent.lists.slice(0, 2).map((list, idx) => (
+                      <div key={idx} className={`p-2 rounded ${isDark ? 'bg-amber-900/20' : 'bg-amber-50'}`}>
+                        {list.type === 'ordered' ? (
+                          <ol className="text-sm space-y-1 list-decimal list-inside">
+                            {list.items.map((item, iidx) => (
+                              <li key={iidx} className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                                {enhanceTextWithLinks(item)}
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <ul className="text-sm space-y-1 list-disc list-inside">
+                            {list.items.map((item, iidx) => (
+                              <li key={iidx} className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                                {enhanceTextWithLinks(item)}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Footer with source link */}
         <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
