@@ -128,6 +128,11 @@ const analyzeTableForChart = (tableData: TableData): {
   // Check if data is suitable for visualization
   const hasNumericData = data.some(row => 
     row.slice(1).some(cell => {
+      // Check for climate-specific patterns
+      if (cell?.includes('°C') || cell?.includes('°F') || cell?.includes('mm') || 
+          cell?.includes('%') || cell?.includes('millibars') || cell?.includes('mph')) {
+        return true;
+      }
       // Remove common units and symbols, then check if numeric
       const cleanCell = cell?.replace(/[°C°F%,\s]/g, '').replace(/[^\d.-]/g, '');
       return cleanCell && !isNaN(parseFloat(cleanCell)) && isFinite(parseFloat(cleanCell));
@@ -136,10 +141,12 @@ const analyzeTableForChart = (tableData: TableData): {
 
   // More lenient criteria for climate/geographic data
   const isClimateOrGeoData = headers.some(h => 
-    /month|temperature|rainfall|precipitation|humidity|climate|weather|elevation|population|year/i.test(h)
-  ) || tableData.caption?.toLowerCase().includes('climate');
+    /month|temperature|rainfall|precipitation|humidity|climate|weather|elevation|population|year|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i.test(h)
+  ) || tableData.caption?.toLowerCase().includes('climate') ||
+      data.some(row => /jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i.test(row[0]));
 
-  if (!hasNumericData || (!isClimateOrGeoData && (headers.length > 5 || data.length > 20))) {
+  // Force visualization for climate data
+  if (!hasNumericData && !isClimateOrGeoData) {
     return { chartType: 'table', data: [], config: {}, shouldVisualize: false };
   }
 
@@ -160,20 +167,40 @@ const analyzeTableForChart = (tableData: TableData): {
     headers.slice(1).forEach((header, idx) => {
       const cellValue = row[idx + 1];
       
-      // Enhanced numeric extraction for climate data
+          // Enhanced numeric extraction for climate data
       let numValue: number;
-      if (cellValue?.includes('°C') || cellValue?.includes('°F')) {
-        // Temperature data
-        numValue = parseFloat(cellValue.replace(/[°CF\s]/g, ''));
+      if (cellValue?.includes('°C')) {
+        // Temperature data - extract the first number before °C
+        const tempMatch = cellValue.match(/(-?\d+(?:\.\d+)?)/);
+        numValue = tempMatch ? parseFloat(tempMatch[1]) : 0;
+      } else if (cellValue?.includes('°F')) {
+        // Convert Fahrenheit to Celsius for consistency
+        const tempMatch = cellValue.match(/(-?\d+(?:\.\d+)?)/);
+        if (tempMatch) {
+          const fahrenheit = parseFloat(tempMatch[1]);
+          numValue = (fahrenheit - 32) * 5/9; // Convert to Celsius
+        } else {
+          numValue = 0;
+        }
       } else if (cellValue?.includes('%')) {
         // Percentage data
         numValue = parseFloat(cellValue.replace(/[%\s]/g, ''));
       } else if (cellValue?.includes('mm')) {
         // Precipitation data
-        numValue = parseFloat(cellValue.replace(/[mm\s]/g, ''));
+        const mmMatch = cellValue.match(/(\d+(?:\.\d+)?)/);
+        numValue = mmMatch ? parseFloat(mmMatch[1]) : 0;
+      } else if (cellValue?.includes('millibars') || cellValue?.includes('milibars')) {
+        // Pressure data
+        const pressureMatch = cellValue.match(/(\d+(?:\.\d+)?)/);
+        numValue = pressureMatch ? parseFloat(pressureMatch[1]) : 0;
+      } else if (cellValue?.includes('kilometres per hour') || cellValue?.includes('mph')) {
+        // Wind speed data
+        const windMatch = cellValue.match(/(\d+(?:\.\d+)?)/);
+        numValue = windMatch ? parseFloat(windMatch[1]) : 0;
       } else {
         // General numeric extraction
-        numValue = parseFloat(cellValue?.replace(/[^\d.-]/g, '') || '0');
+        const numMatch = cellValue?.match(/(\d+(?:\.\d+)?)/);
+        numValue = numMatch ? parseFloat(numMatch[1]) : 0;
       }
       
       if (!isNaN(numValue) && isFinite(numValue)) {
@@ -209,14 +236,18 @@ const analyzeTableForChart = (tableData: TableData): {
   // Determine chart type
   let chartType: 'bar' | 'line' | 'pie' | 'table' = 'bar';
   
-  // Climate data gets special treatment
-  if (isClimateOrGeoData && (hasTimeData || hasMonthData) && chartData.length >= 3) {
-    chartType = 'line'; // Climate time series (monthly/yearly data)
+  // Climate data gets special treatment - always visualize if possible
+  if (isClimateOrGeoData && chartData.length >= 1) {
+    if (hasTimeData || hasMonthData) {
+      chartType = 'line'; // Climate time series (monthly/yearly data)
+    } else {
+      chartType = 'bar'; // Other climate data as bar chart
+    }
   } else if ((hasTimeData || hasMonthData) && chartData.length > 3) {
     chartType = 'line'; // General time series
   } else if (headers.length === 2 && firstColumnIsCategory && chartData.length <= 8) {
     chartType = 'pie';
-  } else if (headers.length <= 8 && chartData.length <= 20) { // Very lenient for all data
+  } else if (headers.length <= 8 && chartData.length <= 20) {
     chartType = 'bar';
   } else {
     chartType = 'table';
@@ -238,7 +269,7 @@ const analyzeTableForChart = (tableData: TableData): {
     chartType,
     data: chartData,
     config,
-    shouldVisualize: chartData.length > 0 && hasNumericData
+    shouldVisualize: chartData.length > 0 && (hasNumericData || isClimateOrGeoData)
   };
 };
 
