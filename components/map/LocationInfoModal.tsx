@@ -165,8 +165,8 @@ export default function LocationInfoModal({ location, onClose, onExpand }: Locat
       </CardHeader>
 
       <CardContent className="flex-1 min-h-0 px-4 py-1">
-        <div className="w-full h-full flex flex-col mt-2 overflow-y-auto">
-          <div className="space-y-3 pr-2">
+        <div className="w-full h-full flex flex-col mt-2">
+          <div className="space-y-3 pr-2 overflow-y-auto max-h-full">
             {/* POI Information */}
             {location.tags && Object.keys(location.tags).length > 0 && (
               <div className="space-y-2 mb-4">
