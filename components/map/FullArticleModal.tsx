@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { WikipediaAPI } from '@/lib/wikipedia';
 import DefinitionCard from './DefinitionCard';
+import DataVisualization from './DataVisualization';
 
 interface FullArticleModalProps {
   title: string;
@@ -391,41 +392,17 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
                           {enhanceTextWithDefinitionCards(articleData.structured.paragraphs.slice(0, 2).join('\n\n'))}
                         </div>
 
-                        {/* Tables */}
+                        {/* Interactive Data Visualizations */}
                         {articleData.structured.tables.map((table: any, idx: number) => (
-                          <div key={idx} className="space-y-3">
-                            {table.caption && (
-                              <h4 className={`text-lg font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                                {table.caption}
-                              </h4>
-                            )}
-                            <div className="overflow-x-auto max-w-full">
-                              <table className={`w-full table-fixed border-collapse ${isDark ? 'border-gray-600' : 'border-gray-300'} border rounded-lg overflow-hidden`}>
-                                {table.headers.length > 0 && (
-                                  <thead>
-                                    <tr className={isDark ? 'bg-gray-800' : 'bg-gray-50'}>
-                                      {table.headers.map((header: string, headerIdx: number) => (
-                                        <th key={headerIdx} className={`border ${isDark ? 'border-gray-600' : 'border-gray-300'} px-4 py-2 text-left font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'} break-words`}>
-                                          {header}
-                                        </th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                )}
-                                <tbody>
-                                  {table.data.slice(0, 10).map((row: string[], rowIdx: number) => (
-                                    <tr key={rowIdx} className={`${rowIdx % 2 === 0 ? (isDark ? 'bg-gray-900/30' : 'bg-white') : (isDark ? 'bg-gray-800/30' : 'bg-gray-50/50')}`}>
-                                      {row.map((cell: string, cellIdx: number) => (
-                                        <td key={cellIdx} className={`border ${isDark ? 'border-gray-600' : 'border-gray-300'} px-4 py-2 ${isDark ? 'text-gray-300' : 'text-gray-700'} break-words max-w-xs`}>
-                                          {enhanceTextWithDefinitionCards(cell)}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
+                          <DataVisualization
+                            key={idx}
+                            tableData={{
+                              caption: table.caption,
+                              headers: table.headers,
+                              data: table.data
+                            }}
+                            index={idx}
+                          />
                         ))}
 
                         {/* Content Sections with Headings */}

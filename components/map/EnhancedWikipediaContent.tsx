@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import DefinitionCard from './DefinitionCard';
 import { WikipediaAPI } from '@/lib/wikipedia';
+import DataVisualization from './DataVisualization';
 
 interface WikipediaData {
   title: string;
@@ -486,32 +487,14 @@ export default function EnhancedWikipediaContent({ topic, wikiData }: EnhancedWi
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-2 space-y-3">
                   {structuredContent.tables.slice(0, 2).map((table, idx) => (
-                    <div key={idx} className={`overflow-x-auto rounded border ${isDark ? 'border-gray-700' : 'border-gray-200'} max-w-full`}>
-                      <table className="w-full text-xs table-fixed">
-                        {table.headers.length > 0 && (
-                          <thead className={`${isDark ? 'bg-gray-800' : 'bg-gray-50'}`}>
-                            <tr>
-                              {table.headers.map((header, hidx) => (
-                                <th key={hidx} className={`px-2 py-1 text-left font-medium ${isDark ? 'text-gray-200' : 'text-gray-900'} break-words`}>
-                                  {enhanceTextWithLinks(header)}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                        )}
-                        <tbody>
-                          {table.rows.slice(0, 5).map((row, ridx) => (
-                            <tr key={ridx} className={`${ridx % 2 === 0 ? (isDark ? 'bg-gray-900/20' : 'bg-white') : (isDark ? 'bg-gray-800/40' : 'bg-gray-50/50')}`}>
-                              {row.map((cell, cidx) => (
-                                <td key={cidx} className={`px-2 py-1 ${isDark ? 'text-gray-300' : 'text-gray-700'} break-words`}>
-                                  {enhanceTextWithLinks(cell)}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <DataVisualization
+                      key={idx}
+                      tableData={{
+                        headers: table.headers,
+                        data: table.rows
+                      }}
+                      index={idx}
+                    />
                   ))}
                 </CollapsibleContent>
               </Collapsible>
