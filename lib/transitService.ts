@@ -1,10 +1,10 @@
 /**
- * Transit Data Service using Transitland API v2
- * Free API for accessing global GTFS transit data
+ * Transit Data Service using free OpenStreetMap Overpass API
+ * No authentication required - uses OpenStreetMap transit data
  */
 
-// Transitland API base URL (no auth required for basic queries)
-const TRANSITLAND_BASE_URL = 'https://transit.land/api/v2/rest';
+// Free transit data sources
+const OVERPASS_BASE_URL = 'https://overpass-api.de/api/interpreter';
 
 // Types for transit data
 export interface TransitStop {
@@ -15,6 +15,9 @@ export interface TransitStop {
   routes?: TransitRoute[];
   wheelchairAccessible?: boolean;
   platformCode?: string;
+  operator?: string;
+  network?: string;
+  transitType?: string;
 }
 
 export interface TransitRoute {
@@ -26,6 +29,7 @@ export interface TransitRoute {
   textColor?: string;
   operator?: string;
   geometry?: number[][];
+  network?: string;
 }
 
 export enum TransitRouteType {
@@ -47,16 +51,6 @@ export interface TransitAgency {
   lang?: string;
 }
 
-export interface TransitDeparture {
-  routeId: string;
-  routeName: string;
-  headsign: string;
-  scheduledTime: Date;
-  realtimeTime?: Date;
-  delay?: number; // in seconds
-  tripId: string;
-}
-
 export interface BoundingBox {
   minLat: number;
   minLon: number;
@@ -69,37 +63,58 @@ class TransitService {
   private cacheTimeout = 5 * 60 * 1000; // 5 minutes
 
   /**
-   * Get transit stops within a bounding box
+   * Get transit stops within a bounding box using OpenStreetMap data
    */
   async getStopsInBounds(bounds: BoundingBox, limit = 100): Promise<TransitStop[]> {
     const cacheKey = `stops_${bounds.minLat}_${bounds.minLon}_${bounds.maxLat}_${bounds.maxLon}`;
     
     // Check cache
     const cached = this.getFromCache(cacheKey);
-    if (cached) return cached;
+    if (cached) return cached as TransitStop[];
 
     try {
-      const url = new URL(`${TRANSITLAND_BASE_URL}/stops`);
-      url.searchParams.append('bbox', `${bounds.minLon},${bounds.minLat},${bounds.maxLon},${bounds.maxLat}`);
-      url.searchParams.append('limit', limit.toString());
-      url.searchParams.append('include_geometry', 'false');
+      // Overpass query for transit stops
+      const query = `
+        [out:json][timeout:25];
+        (
+          node[public_transport~"^(stop_position|platform)$"](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+          node[highway=bus_stop](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+          node[railway~"^(station|halt|tram_stop)$"](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+          node[amenity=ferry_terminal](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+        );
+        out geom ${Math.min(limit, 500)};
+      `;
 
-      const response = await fetch(url.toString());
-      
+      const response = await fetch(OVERPASS_BASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query)
+      });
+
       if (!response.ok) {
-        console.error('Transit API error:', response.status);
+        console.error('Overpass API error:', response.status);
         return [];
       }
 
       const data = await response.json();
-      const stops: TransitStop[] = data.stops?.map((stop: Record<string, unknown>) => ({
-        id: stop.id,
-        name: (stop.stop_name as string) || 'Unknown Stop',
-        lat: (stop.geometry as { coordinates: number[] }).coordinates[1],
-        lon: (stop.geometry as { coordinates: number[] }).coordinates[0],
-        wheelchairAccessible: (stop.wheelchair_boarding as number) === 1,
-        platformCode: stop.platform_code as string
-      })) || [];
+      const stops: TransitStop[] = (data.elements || [])
+        .filter((element: Record<string, unknown>) => element.lat && element.lon)
+        .slice(0, limit)
+        .map((element: Record<string, unknown>) => {
+          const tags = element.tags as Record<string, string> || {};
+          
+          return {
+            id: `osm_${element.type}_${element.id}`,
+            name: tags.name || tags.ref || this.getStopTypeFromTags(tags) || 'Transit Stop',
+            lat: element.lat as number,
+            lon: element.lon as number,
+            wheelchairAccessible: tags.wheelchair === 'yes',
+            platformCode: tags.local_ref || tags.ref,
+            operator: tags.operator,
+            network: tags.network,
+            transitType: this.getStopTypeFromTags(tags)
+          };
+        });
 
       this.setCache(cacheKey, stops);
       return stops;
@@ -110,38 +125,52 @@ class TransitService {
   }
 
   /**
-   * Get transit routes for a specific area
+   * Get transit routes for a specific area using OpenStreetMap data
    */
   async getRoutesInBounds(bounds: BoundingBox, limit = 50): Promise<TransitRoute[]> {
     const cacheKey = `routes_${bounds.minLat}_${bounds.minLon}_${bounds.maxLat}_${bounds.maxLon}`;
     
     const cached = this.getFromCache(cacheKey);
-    if (cached) return cached;
+    if (cached) return cached as TransitRoute[];
 
     try {
-      const url = new URL(`${TRANSITLAND_BASE_URL}/routes`);
-      url.searchParams.append('bbox', `${bounds.minLon},${bounds.minLat},${bounds.maxLon},${bounds.maxLat}`);
-      url.searchParams.append('limit', limit.toString());
-      url.searchParams.append('include_geometry', 'true');
+      // Overpass query for transit routes
+      const query = `
+        [out:json][timeout:25];
+        (
+          relation[type=route][route~"^(bus|tram|train|subway|light_rail|monorail|ferry)$"](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+        );
+        out geom ${Math.min(limit, 100)};
+      `;
 
-      const response = await fetch(url.toString());
-      
+      const response = await fetch(OVERPASS_BASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query)
+      });
+
       if (!response.ok) {
-        console.error('Transit routes API error:', response.status);
+        console.error('Overpass routes API error:', response.status);
         return [];
       }
 
       const data = await response.json();
-      const routes: TransitRoute[] = data.routes?.map((route: Record<string, unknown>) => ({
-        id: route.id,
-        name: (route.route_long_name as string) || (route.route_short_name as string) || 'Unknown Route',
-        shortName: route.route_short_name as string,
-        type: (route.route_type as number) || 3,
-        color: (route.route_color as string) ? `#${route.route_color}` : undefined,
-        textColor: (route.route_text_color as string) ? `#${route.route_text_color}` : undefined,
-        operator: (route.agency as { agency_name?: string })?.agency_name,
-        geometry: (route.geometry as { coordinates?: number[][] })?.coordinates
-      })) || [];
+      const routes: TransitRoute[] = (data.elements || [])
+        .slice(0, limit)
+        .map((element: Record<string, unknown>) => {
+          const tags = element.tags as Record<string, string> || {};
+          
+          return {
+            id: `osm_${element.id}`,
+            name: tags.name || tags.ref || 'Transit Route',
+            shortName: tags.ref,
+            type: this.getRouteTypeFromTags(tags),
+            color: tags.colour || this.getDefaultColor(this.getRouteTypeFromTags(tags)),
+            operator: tags.operator,
+            network: tags.network,
+            geometry: this.extractRouteGeometry(element)
+          };
+        });
 
       this.setCache(cacheKey, routes);
       return routes;
@@ -152,37 +181,58 @@ class TransitService {
   }
 
   /**
-   * Get nearby transit stops from a point
+   * Get nearby transit stops from a point using OpenStreetMap data
    */
   async getNearbyStops(lat: number, lon: number, radius = 500, limit = 20): Promise<TransitStop[]> {
     const cacheKey = `nearby_${lat}_${lon}_${radius}`;
     
     const cached = this.getFromCache(cacheKey);
-    if (cached) return cached;
+    if (cached) return cached as TransitStop[];
 
     try {
-      const url = new URL(`${TRANSITLAND_BASE_URL}/stops`);
-      url.searchParams.append('lat', lat.toString());
-      url.searchParams.append('lon', lon.toString());
-      url.searchParams.append('radius', radius.toString());
-      url.searchParams.append('limit', limit.toString());
-
-      const response = await fetch(url.toString());
+      // Convert radius to degrees (approximate)
+      const radiusDegrees = radius / 111320; // meters to degrees
       
+      const query = `
+        [out:json][timeout:25];
+        (
+          node[public_transport~"^(stop_position|platform)$"](around:${radius},${lat},${lon});
+          node[highway=bus_stop](around:${radius},${lat},${lon});
+          node[railway~"^(station|halt|tram_stop)$"](around:${radius},${lat},${lon});
+          node[amenity=ferry_terminal](around:${radius},${lat},${lon});
+        );
+        out geom ${Math.min(limit, 100)};
+      `;
+
+      const response = await fetch(OVERPASS_BASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query)
+      });
+
       if (!response.ok) {
         console.error('Nearby stops API error:', response.status);
         return [];
       }
 
       const data = await response.json();
-      const stops: TransitStop[] = data.stops?.map((stop: Record<string, unknown>) => ({
-        id: stop.id,
-        name: (stop.stop_name as string) || 'Unknown Stop',
-        lat: (stop.geometry as { coordinates: number[] }).coordinates[1],
-        lon: (stop.geometry as { coordinates: number[] }).coordinates[0],
-        wheelchairAccessible: (stop.wheelchair_boarding as number) === 1,
-        platformCode: stop.platform_code as string
-      })) || [];
+      const stops: TransitStop[] = (data.elements || [])
+        .slice(0, limit)
+        .map((element: Record<string, unknown>) => {
+          const tags = element.tags as Record<string, string> || {};
+          
+          return {
+            id: `osm_${element.type}_${element.id}`,
+            name: tags.name || tags.ref || this.getStopTypeFromTags(tags) || 'Transit Stop',
+            lat: element.lat as number,
+            lon: element.lon as number,
+            wheelchairAccessible: tags.wheelchair === 'yes',
+            platformCode: tags.local_ref || tags.ref,
+            operator: tags.operator,
+            network: tags.network,
+            transitType: this.getStopTypeFromTags(tags)
+          };
+        });
 
       this.setCache(cacheKey, stops);
       return stops;
@@ -193,78 +243,57 @@ class TransitService {
   }
 
   /**
-   * Get departures for a specific stop
+   * Since we're using OpenStreetMap data, real-time departures aren't available
+   * This would need integration with specific transit agency APIs
    */
-  async getStopDepartures(stopId: string, startTime?: Date, endTime?: Date): Promise<TransitDeparture[]> {
-    const cacheKey = `departures_${stopId}_${startTime?.getTime()}_${endTime?.getTime()}`;
-    
-    const cached = this.getFromCache(cacheKey);
-    if (cached) return cached;
-
-    try {
-      const url = new URL(`${TRANSITLAND_BASE_URL}/stops/${stopId}/departures`);
-      
-      if (startTime) {
-        url.searchParams.append('start_time', startTime.toISOString());
-      }
-      if (endTime) {
-        url.searchParams.append('end_time', endTime.toISOString());
-      }
-
-      const response = await fetch(url.toString());
-      
-      if (!response.ok) {
-        console.error('Departures API error:', response.status);
-        return [];
-      }
-
-      const data = await response.json();
-      const departures: TransitDeparture[] = data.departures?.map((dep: Record<string, unknown>) => ({
-        routeId: (dep.trip as { route?: { id?: string } })?.route?.id || '',
-        routeName: (dep.trip as { route?: { route_long_name?: string; route_short_name?: string } })?.route?.route_long_name || (dep.trip as { route?: { route_short_name?: string } })?.route?.route_short_name || 'Unknown',
-        headsign: (dep.trip as { trip_headsign?: string })?.trip_headsign || '',
-        scheduledTime: new Date(dep.scheduled_departure_time as string),
-        realtimeTime: (dep.realtime_departure_time as string) ? new Date(dep.realtime_departure_time as string) : undefined,
-        delay: dep.delay as number,
-        tripId: (dep.trip as { id?: string })?.id || ''
-      })) || [];
-
-      this.setCache(cacheKey, departures);
-      return departures;
-    } catch (error) {
-      console.error('Failed to fetch departures:', error);
-      return [];
-    }
+  async getStopDepartures(stopId: string): Promise<[]> {
+    console.log('Real-time departures not available with OpenStreetMap data source:', stopId);
+    return [];
   }
 
   /**
-   * Search for transit agencies in an area
+   * Get transit agencies/operators in an area
    */
   async getAgenciesInBounds(bounds: BoundingBox): Promise<TransitAgency[]> {
     const cacheKey = `agencies_${bounds.minLat}_${bounds.minLon}_${bounds.maxLat}_${bounds.maxLon}`;
     
     const cached = this.getFromCache(cacheKey);
-    if (cached) return cached;
+    if (cached) return cached as TransitAgency[];
 
     try {
-      const url = new URL(`${TRANSITLAND_BASE_URL}/agencies`);
-      url.searchParams.append('bbox', `${bounds.minLon},${bounds.minLat},${bounds.maxLon},${bounds.maxLat}`);
+      const query = `
+        [out:json][timeout:25];
+        (
+          relation[type=route][route~"^(bus|tram|train|subway|light_rail|monorail|ferry)$"][operator](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+        );
+        out tags;
+      `;
 
-      const response = await fetch(url.toString());
-      
+      const response = await fetch(OVERPASS_BASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query)
+      });
+
       if (!response.ok) {
         console.error('Agencies API error:', response.status);
         return [];
       }
 
       const data = await response.json();
-      const agencies: TransitAgency[] = data.agencies?.map((agency: Record<string, unknown>) => ({
-        id: agency.id,
-        name: (agency.agency_name as string) || 'Unknown Agency',
-        url: agency.agency_url as string,
-        timezone: agency.agency_timezone as string,
-        lang: agency.agency_lang as string
-      })) || [];
+      const operatorsSet = new Set<string>();
+      
+      (data.elements || []).forEach((element: Record<string, unknown>) => {
+        const tags = element.tags as Record<string, string> || {};
+        if (tags.operator) {
+          operatorsSet.add(tags.operator);
+        }
+      });
+
+      const agencies: TransitAgency[] = Array.from(operatorsSet).map(operator => ({
+        id: `operator_${operator.replace(/\s+/g, '_').toLowerCase()}`,
+        name: operator
+      }));
 
       this.setCache(cacheKey, agencies);
       return agencies;
@@ -281,7 +310,7 @@ class TransitService {
     return {
       type: 'FeatureCollection',
       features: routes
-        .filter(route => route.geometry)
+        .filter(route => route.geometry && route.geometry.length > 0)
         .map(route => ({
           type: 'Feature',
           properties: {
@@ -291,7 +320,8 @@ class TransitService {
             type: route.type,
             color: route.color || this.getDefaultColor(route.type),
             textColor: route.textColor || '#FFFFFF',
-            operator: route.operator
+            operator: route.operator,
+            network: route.network
           },
           geometry: {
             type: 'LineString',
@@ -313,7 +343,10 @@ class TransitService {
           id: stop.id,
           name: stop.name,
           wheelchairAccessible: stop.wheelchairAccessible,
-          platformCode: stop.platformCode
+          platformCode: stop.platformCode,
+          operator: stop.operator,
+          network: stop.network,
+          transitType: stop.transitType
         },
         geometry: {
           type: 'Point',
@@ -321,6 +354,57 @@ class TransitService {
         }
       }))
     };
+  }
+
+  /**
+   * Determine stop type from OpenStreetMap tags
+   */
+  private getStopTypeFromTags(tags: Record<string, string>): string {
+    if (tags.public_transport === 'stop_position') return 'Stop Position';
+    if (tags.public_transport === 'platform') return 'Platform';
+    if (tags.highway === 'bus_stop') return 'Bus Stop';
+    if (tags.railway === 'station') return 'Railway Station';
+    if (tags.railway === 'halt') return 'Railway Halt';
+    if (tags.railway === 'tram_stop') return 'Tram Stop';
+    if (tags.amenity === 'ferry_terminal') return 'Ferry Terminal';
+    return 'Transit Stop';
+  }
+
+  /**
+   * Convert OpenStreetMap route type to TransitRouteType enum
+   */
+  private getRouteTypeFromTags(tags: Record<string, string>): TransitRouteType {
+    const routeType = tags.route || '';
+    
+    switch (routeType) {
+      case 'subway':
+        return TransitRouteType.SUBWAY;
+      case 'train':
+        return TransitRouteType.RAIL;
+      case 'bus':
+        return TransitRouteType.BUS;
+      case 'ferry':
+        return TransitRouteType.FERRY;
+      case 'tram':
+      case 'light_rail':
+        return TransitRouteType.TRAM;
+      case 'monorail':
+        return TransitRouteType.RAIL;
+      default:
+        return TransitRouteType.BUS;
+    }
+  }
+
+  /**
+   * Extract geometry from Overpass route relation
+   */
+  private extractRouteGeometry(element: Record<string, unknown>): number[][] | undefined {
+    const geometry = element.geometry as Record<string, unknown>[];
+    if (!geometry) return undefined;
+    
+    return geometry
+      .filter(g => g.lat && g.lon)
+      .map(g => [g.lon as number, g.lat as number]);
   }
 
   /**
