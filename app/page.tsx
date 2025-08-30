@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import BasicMap from '@/components/map/BasicMap';
 import PreNavigationScreen from '@/components/map/PreNavigationScreen';
+import LiveNavigationModal from '@/components/map/LiveNavigationModal';
 
 interface RouteStep {
   instructions: string;
@@ -52,6 +53,7 @@ interface RoutePoint {
 export default function Home() {
   const [selectedRoute, setSelectedRoute] = useState<NavigationRoute | null>(null);
   const [showPreNavigation, setShowPreNavigation] = useState(false);
+  const [showLiveNavigation, setShowLiveNavigation] = useState(false);
   const [origin, setOrigin] = useState<RoutePoint | null>(null);
   const [destination, setDestination] = useState<RoutePoint | null>(null);
 
@@ -70,8 +72,14 @@ export default function Home() {
 
   const handleNavigationStart = useCallback(() => {
     setShowPreNavigation(false);
-    // Navigate to navigation page or start navigation mode
-    window.location.href = '/navigation';
+    setShowLiveNavigation(true);
+    // Optionally zoom to current location when navigation starts
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        // You could update the map center here if needed
+        console.log('Navigation started at:', position.coords);
+      });
+    }
   }, []);
 
   const handleNavigationCancel = useCallback(() => {
@@ -83,6 +91,19 @@ export default function Home() {
 
   const handleAlternativeSelect = useCallback((route: NavigationRoute) => {
     setSelectedRoute(route);
+  }, []);
+
+  const handleEndNavigation = useCallback(() => {
+    setShowLiveNavigation(false);
+    setSelectedRoute(null);
+    setOrigin(null);
+    setDestination(null);
+  }, []);
+
+  const handleRecalculateRoute = useCallback(() => {
+    // This would trigger route recalculation
+    console.log('Recalculating route...');
+    // You could call the route API again here
   }, []);
 
   return (
@@ -100,6 +121,17 @@ export default function Home() {
           onStartNavigation={handleNavigationStart}
           onCancel={handleNavigationCancel}
           onSelectAlternative={handleAlternativeSelect}
+        />
+      )}
+
+      {/* Live Navigation Mode */}
+      {showLiveNavigation && selectedRoute && origin && destination && (
+        <LiveNavigationModal
+          route={selectedRoute}
+          origin={origin}
+          destination={destination}
+          onEndNavigation={handleEndNavigation}
+          onRecalculate={handleRecalculateRoute}
         />
       )}
     </div>
