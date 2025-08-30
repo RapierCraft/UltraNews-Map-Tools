@@ -73,10 +73,16 @@ export default function NavigationPage() {
   const [destination, setDestination] = useState<RoutePoint | null>(null);
 
   const handleRouteSelect = useCallback((route: NavigationRoute, routeOrigin?: RoutePoint, routeDestination?: RoutePoint) => {
+    console.log('handleRouteSelect called with:', { 
+      route: route.total_distance_m + 'm', 
+      routeOrigin, 
+      routeDestination 
+    });
     setSelectedRoute(route);
     if (routeOrigin) setOrigin(routeOrigin);
     if (routeDestination) setDestination(routeDestination);
     setShowPreNavigation(true);
+    console.log('showPreNavigation set to true');
   }, []);
 
   const handleNavigationStart = useCallback(() => {

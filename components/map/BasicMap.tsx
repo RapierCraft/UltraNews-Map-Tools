@@ -417,7 +417,9 @@ export default function BasicMap({
                     console.log('Processed route with geometry:', route.overview_geometry.length, 'points');
                     setCalculatedRoute(route);
                     
+                    console.log('onRouteRequest available:', !!onRouteRequest);
                     if (onRouteRequest) {
+                      console.log('Calling onRouteRequest with:', { route: route.total_distance_m + 'm', origin, destination });
                       onRouteRequest(route, origin, destination);
                     }
                     return;
