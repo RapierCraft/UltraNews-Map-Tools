@@ -876,11 +876,11 @@ export default function SimpleVectorGlobe({
     const baseStyle = { ...style };
     
     if (currentLayer === 'osm-dark') {
-      // Use invert filter on high-quality OSM tiles for perfect dark mode
-      baseStyle.filter = 'invert(1) hue-rotate(180deg) brightness(0.9) contrast(1.1)';
+      // Lighter dark mode with better road/feature visibility
+      baseStyle.filter = 'invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.9) saturate(0.7)';
     } else if (currentLayer === 'osm-standard') {
-      // Clean standard mode
-      baseStyle.filter = 'contrast(1.05) saturate(1.05)';
+      // Enhanced light mode - inverse of dark mode adjustments
+      baseStyle.filter = 'brightness(0.85) contrast(1.3) saturate(1.2)';
     }
     
     return baseStyle;

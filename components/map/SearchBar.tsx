@@ -429,21 +429,24 @@ export default function SearchBar({
 
   return (
     <div className={`relative ${className}`} ref={resultsRef}>
-      <div className="relative flex items-center">
+      <div className="relative">
+        {/* Logo/Dropdown positioned within the input container */}
         {showModeSelector ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute left-1 h-8 w-8 z-10 hover:bg-accent"
+                className={`absolute left-1 z-10 hover:bg-accent transition-all duration-500 ${
+                  isNavigationMode ? 'top-3 h-6 w-6' : 'top-1 h-8 w-8'
+                }`}
               >
                 <Image
                   src="/logo.png"
                   alt="UltraMaps"
-                  width={20}
-                  height={20}
-                  className="h-5 w-5"
+                  width={isNavigationMode ? 16 : 20}
+                  height={isNavigationMode ? 16 : 20}
+                  className={isNavigationMode ? "h-4 w-4" : "h-5 w-5"}
                 />
               </Button>
             </DropdownMenuTrigger>
@@ -493,7 +496,9 @@ export default function SearchBar({
             alt="UltraMaps"
             width={24}
             height={24}
-            className="absolute left-2 h-6 w-6 pointer-events-none"
+            className={`absolute pointer-events-none transition-all duration-500 ${
+              isNavigationMode ? 'left-2 top-3 h-4 w-4' : 'left-2 top-2 h-6 w-6'
+            }`}
           />
         )}
         <div className={`flex-1 transition-all duration-500 ${isNavigationMode ? 'space-y-2' : ''}`}>
@@ -597,7 +602,7 @@ export default function SearchBar({
             </div>
           )}
         </div>
-        {/* Clear/Exit button */}
+        {/* Clear/Exit button positioned within the input */}
         {(query || isNavigationMode) && (
           <Button
             size="icon"
@@ -614,10 +619,12 @@ export default function SearchBar({
               }
               clearSearch();
             }}
-            className="absolute right-1 h-8 w-8"
+            className={`absolute right-1 z-10 transition-all duration-500 ${
+              isNavigationMode ? 'top-2 h-6 w-6' : 'top-1 h-8 w-8'
+            }`}
             title={isNavigationMode ? "Exit navigation mode" : "Clear search"}
           >
-            <X className="h-4 w-4" />
+            <X className={isNavigationMode ? "h-3 w-3" : "h-4 w-4"} />
           </Button>
         )}
       </div>
