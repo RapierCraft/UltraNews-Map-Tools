@@ -65,7 +65,7 @@ export interface BoundingBox {
 }
 
 class TransitService {
-  private cache: Map<string, { data: any; timestamp: number }> = new Map();
+  private cache: Map<string, { data: unknown; timestamp: number }> = new Map();
   private cacheTimeout = 5 * 60 * 1000; // 5 minutes
 
   /**
@@ -92,13 +92,13 @@ class TransitService {
       }
 
       const data = await response.json();
-      const stops: TransitStop[] = data.stops?.map((stop: any) => ({
+      const stops: TransitStop[] = data.stops?.map((stop: Record<string, unknown>) => ({
         id: stop.id,
-        name: stop.stop_name,
-        lat: stop.geometry.coordinates[1],
-        lon: stop.geometry.coordinates[0],
-        wheelchairAccessible: stop.wheelchair_boarding === 1,
-        platformCode: stop.platform_code
+        name: (stop.stop_name as string) || 'Unknown Stop',
+        lat: (stop.geometry as { coordinates: number[] }).coordinates[1],
+        lon: (stop.geometry as { coordinates: number[] }).coordinates[0],
+        wheelchairAccessible: (stop.wheelchair_boarding as number) === 1,
+        platformCode: stop.platform_code as string
       })) || [];
 
       this.setCache(cacheKey, stops);
@@ -132,15 +132,15 @@ class TransitService {
       }
 
       const data = await response.json();
-      const routes: TransitRoute[] = data.routes?.map((route: any) => ({
+      const routes: TransitRoute[] = data.routes?.map((route: Record<string, unknown>) => ({
         id: route.id,
-        name: route.route_long_name || route.route_short_name,
-        shortName: route.route_short_name,
-        type: route.route_type,
-        color: route.route_color ? `#${route.route_color}` : undefined,
-        textColor: route.route_text_color ? `#${route.route_text_color}` : undefined,
-        operator: route.agency?.agency_name,
-        geometry: route.geometry?.coordinates
+        name: (route.route_long_name as string) || (route.route_short_name as string) || 'Unknown Route',
+        shortName: route.route_short_name as string,
+        type: (route.route_type as number) || 3,
+        color: (route.route_color as string) ? `#${route.route_color}` : undefined,
+        textColor: (route.route_text_color as string) ? `#${route.route_text_color}` : undefined,
+        operator: (route.agency as { agency_name?: string })?.agency_name,
+        geometry: (route.geometry as { coordinates?: number[][] })?.coordinates
       })) || [];
 
       this.setCache(cacheKey, routes);
@@ -175,13 +175,13 @@ class TransitService {
       }
 
       const data = await response.json();
-      const stops: TransitStop[] = data.stops?.map((stop: any) => ({
+      const stops: TransitStop[] = data.stops?.map((stop: Record<string, unknown>) => ({
         id: stop.id,
-        name: stop.stop_name,
-        lat: stop.geometry.coordinates[1],
-        lon: stop.geometry.coordinates[0],
-        wheelchairAccessible: stop.wheelchair_boarding === 1,
-        platformCode: stop.platform_code
+        name: (stop.stop_name as string) || 'Unknown Stop',
+        lat: (stop.geometry as { coordinates: number[] }).coordinates[1],
+        lon: (stop.geometry as { coordinates: number[] }).coordinates[0],
+        wheelchairAccessible: (stop.wheelchair_boarding as number) === 1,
+        platformCode: stop.platform_code as string
       })) || [];
 
       this.setCache(cacheKey, stops);
@@ -219,14 +219,14 @@ class TransitService {
       }
 
       const data = await response.json();
-      const departures: TransitDeparture[] = data.departures?.map((dep: any) => ({
-        routeId: dep.trip?.route?.id,
-        routeName: dep.trip?.route?.route_long_name || dep.trip?.route?.route_short_name,
-        headsign: dep.trip?.trip_headsign,
-        scheduledTime: new Date(dep.scheduled_departure_time),
-        realtimeTime: dep.realtime_departure_time ? new Date(dep.realtime_departure_time) : undefined,
-        delay: dep.delay,
-        tripId: dep.trip?.id
+      const departures: TransitDeparture[] = data.departures?.map((dep: Record<string, unknown>) => ({
+        routeId: (dep.trip as { route?: { id?: string } })?.route?.id || '',
+        routeName: (dep.trip as { route?: { route_long_name?: string; route_short_name?: string } })?.route?.route_long_name || (dep.trip as { route?: { route_short_name?: string } })?.route?.route_short_name || 'Unknown',
+        headsign: (dep.trip as { trip_headsign?: string })?.trip_headsign || '',
+        scheduledTime: new Date(dep.scheduled_departure_time as string),
+        realtimeTime: (dep.realtime_departure_time as string) ? new Date(dep.realtime_departure_time as string) : undefined,
+        delay: dep.delay as number,
+        tripId: (dep.trip as { id?: string })?.id || ''
       })) || [];
 
       this.setCache(cacheKey, departures);
@@ -258,12 +258,12 @@ class TransitService {
       }
 
       const data = await response.json();
-      const agencies: TransitAgency[] = data.agencies?.map((agency: any) => ({
+      const agencies: TransitAgency[] = data.agencies?.map((agency: Record<string, unknown>) => ({
         id: agency.id,
-        name: agency.agency_name,
-        url: agency.agency_url,
-        timezone: agency.agency_timezone,
-        lang: agency.agency_lang
+        name: (agency.agency_name as string) || 'Unknown Agency',
+        url: agency.agency_url as string,
+        timezone: agency.agency_timezone as string,
+        lang: agency.agency_lang as string
       })) || [];
 
       this.setCache(cacheKey, agencies);
@@ -348,7 +348,7 @@ class TransitService {
   /**
    * Cache management
    */
-  private getFromCache(key: string): any {
+  private getFromCache(key: string): unknown {
     const cached = this.cache.get(key);
     if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
       return cached.data;
@@ -356,7 +356,7 @@ class TransitService {
     return null;
   }
 
-  private setCache(key: string, data: any): void {
+  private setCache(key: string, data: unknown): void {
     this.cache.set(key, { data, timestamp: Date.now() });
     
     // Clean old cache entries
