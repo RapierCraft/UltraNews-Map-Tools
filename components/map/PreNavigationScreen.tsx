@@ -224,7 +224,7 @@ export default function PreNavigationScreen({
   };
 
   return (
-    <div className="fixed right-0 top-0 bottom-0 z-50 w-[480px] max-w-[40vw]">
+    <div className="fixed right-16 top-4 bottom-4 z-40 w-[460px] max-w-[38vw]">
       <Card className="w-full h-full flex flex-col shadow-xl border-l-2">
           {/* Header */}
           <div className="p-4 border-b">
