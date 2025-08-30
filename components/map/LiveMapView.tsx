@@ -57,7 +57,7 @@ interface LiveMapViewProps {
 
 const defaultDataLayers: LayerState = {
   roads: true,
-  buildings: true,
+  buildings: false,
   waterways: true,
   parks: true,
   labels: true,

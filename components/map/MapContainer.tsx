@@ -9,6 +9,8 @@ import MapController from './MapController';
 import FilterableOSMTiles from './FilterableOSMTiles';
 import BorderOverlay from './BorderOverlay';
 import ProperNewsOverlay from './ProperNewsOverlay';
+import LeafletCompassControl from './LeafletCompassControl';
+import TrafficRouteOverlay from './TrafficRouteOverlay';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -72,6 +74,8 @@ interface MapContainerProps {
     source: string;
   };
   timelinePosition?: number;
+  navigationRoute?: any;
+  showTrafficOverlay?: boolean;
 }
 
 const tileLayers: Record<string, { url: string; attribution: string; maxZoom?: number }> = {
@@ -170,7 +174,7 @@ export default function MapContainer({
   markers = [],
   className = '',
   style = {},
-  tileLayer = 'osm-standard',
+  tileLayer = 'cartodb-light',
   dataLayers = defaultLayers,
   isDarkTheme = false,
   selectedLocation,
@@ -185,7 +189,9 @@ export default function MapContainer({
   },
   boundsToFit,
   newsStory,
-  timelinePosition = 100
+  timelinePosition = 100,
+  navigationRoute,
+  showTrafficOverlay = false
 }: MapContainerProps) {
   const [isMounted, setIsMounted] = useState(false);
 
@@ -228,6 +234,7 @@ export default function MapContainer({
     >
       <MapController center={center} zoom={zoom} boundsToFit={boundsToFit} />
       <ZoomControl position="topright" />
+      <LeafletCompassControl position="topleft" isDarkTheme={isDarkTheme} />
       
       {/* Use filterable tiles for OSM themes, regular tiles for others */}
       {useOverlaySystem ? (
@@ -259,6 +266,15 @@ export default function MapContainer({
           story={newsStory}
           enabled={true}
           timelinePosition={timelinePosition}
+        />
+      )}
+
+      {/* Navigation Route with Traffic overlay */}
+      {showTrafficOverlay && navigationRoute && (
+        <TrafficRouteOverlay 
+          route={navigationRoute}
+          showTrafficColors={true}
+          showWaypoints={true}
         />
       )}
       

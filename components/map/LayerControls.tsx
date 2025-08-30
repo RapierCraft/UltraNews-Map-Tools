@@ -34,7 +34,7 @@ interface LayerControlsProps {
 
 const defaultLayers: LayerState = {
   roads: true,
-  buildings: true,
+  buildings: false,
   waterways: true,
   parks: true,
   labels: true,

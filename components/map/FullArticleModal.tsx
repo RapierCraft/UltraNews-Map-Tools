@@ -233,49 +233,85 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
           // Get main content
           const content = doc.querySelector('.mw-parser-output') || doc.querySelector('body');
           
-          // Extract real Wikipedia sections with their content
-          const sections = [];
-          const allElements = Array.from(content?.children || []);
-          let currentSection = { heading: '', content: [], level: 0 };
+          // Extract all content as clean text first
+          const allText = content?.textContent || '';
+          const allParagraphs = Array.from(content?.querySelectorAll('p') || [])
+            .map(p => p.textContent || '')
+            .filter(text => text.trim().length > 30);
           
-          allElements.forEach(element => {
-            if (element.tagName.match(/^H[2-6]$/)) {
-              // Save previous section if it has content
-              if (currentSection.heading && currentSection.content.length > 0) {
-                sections.push({ ...currentSection });
+          // Extract headings with their following content
+          const headings = Array.from(content?.querySelectorAll('h2, h3, h4') || []);
+          const sections = [];
+          
+          if (headings.length === 0) {
+            // No headings found, just show all paragraphs as content
+            const allParagraphs = Array.from(content?.querySelectorAll('p') || [])
+              .map(p => p.textContent || '')
+              .filter(text => text.trim().length > 20);
+            
+            if (allParagraphs.length > 0) {
+              sections.push({
+                heading: 'Content',
+                content: allParagraphs.map(p => ({ type: 'paragraph', content: p })),
+                level: 2
+              });
+            }
+          } else {
+            // Process each heading and collect content until next heading
+            for (let i = 0; i < headings.length; i++) {
+              const heading = headings[i];
+              const headingText = heading.textContent || '';
+              if (!headingText.trim() || 
+                  headingText.toLowerCase().includes('contents') ||
+                  headingText.toLowerCase().includes('see also') ||
+                  headingText.toLowerCase().includes('further reading') ||
+                  headingText.toLowerCase().includes('external links') ||
+                  headingText.toLowerCase().includes('references') ||
+                  headingText.toLowerCase().includes('bibliography') ||
+                  headingText.toLowerCase().includes('notes')) continue;
+              
+              const nextHeading = headings[i + 1];
+              const sectionContent = [];
+              
+              // Get all elements in the document after this heading
+              const allElements = Array.from(content?.querySelectorAll('*') || []);
+              const headingIndex = allElements.indexOf(heading);
+              const nextHeadingIndex = nextHeading ? allElements.indexOf(nextHeading) : allElements.length;
+              
+              // Collect content between headings
+              for (let j = headingIndex + 1; j < nextHeadingIndex; j++) {
+                const element = allElements[j];
+                
+                if (element.tagName === 'P' && element.textContent && element.textContent.trim().length > 20) {
+                  sectionContent.push({
+                    type: 'paragraph',
+                    content: element.textContent
+                  });
+                } else if (element.tagName === 'UL' || element.tagName === 'OL') {
+                  const items = Array.from(element.querySelectorAll('li')).map(li => li.textContent || '').filter(text => text.trim());
+                  if (items.length > 0) {
+                    sectionContent.push({
+                      type: element.tagName.toLowerCase(),
+                      items: items
+                    });
+                  }
+                }
               }
               
-              // Start new section
-              currentSection = {
-                heading: element.textContent || '',
-                content: [],
-                level: parseInt(element.tagName.charAt(1))
-              };
-            } else if (element.tagName === 'P' && element.textContent && element.textContent.trim().length > 30) {
-              // Add paragraph to current section
-              currentSection.content.push({
-                type: 'paragraph',
-                content: element.textContent
-              });
-            } else if (element.tagName === 'UL' || element.tagName === 'OL') {
-              // Add list to current section
-              const listItems = Array.from(element.querySelectorAll('li')).map(li => li.textContent || '').filter(text => text.trim());
-              if (listItems.length > 0) {
-                currentSection.content.push({
-                  type: element.tagName.toLowerCase(),
-                  items: listItems
+              if (sectionContent.length > 0) {
+                sections.push({
+                  heading: headingText.replace(/\[edit\]/gi, '').trim(),
+                  content: sectionContent,
+                  level: parseInt(heading.tagName.charAt(1))
                 });
               }
             }
-          });
-          
-          // Add final section
-          if (currentSection.heading && currentSection.content.length > 0) {
-            sections.push(currentSection);
           }
           
           const structuredContent = {
-            sections: sections.filter(s => s.heading && s.content.length > 0)
+            sections: sections,
+            allParagraphs: allParagraphs,
+            fullText: allText
           };
           
           // Get summary for images and metadata
@@ -405,89 +441,72 @@ export default function FullArticleModal({ title, isOpen, onClose }: FullArticle
                       )}
                     </div>
 
-                    {/* Structured Content */}
-                    {articleData?.structured ? (
+                    {/* Real Wikipedia Sections */}
+                    {articleData?.structured && articleData.structured.sections ? (
                       <div className="space-y-8">
                         {/* Introduction */}
-                        <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} break-words max-w-full`}>
-                          {enhanceTextWithDefinitionCards(articleData.structured.paragraphs.slice(0, 2).join('\n\n'))}
+                        <div className="space-y-4">
+                          <h2 className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                            Introduction
+                          </h2>
+                          <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} break-words max-w-full`}>
+                            {enhanceTextWithDefinitionCards(articleData.extract)}
+                          </div>
                         </div>
 
-                        {/* Interactive Data Visualizations - Disabled temporarily */}
-                        {/* {articleData.structured.tables.map((table: any, idx: number) => (
-                          <DataVisualization
-                            key={idx}
-                            tableData={{
-                              caption: table.caption,
-                              headers: table.headers,
-                              data: table.data
-                            }}
-                            index={idx}
-                          />
-                        ))} */}
-
-                        {/* Content Sections with Headings */}
-                        {articleData.structured.headings.map((heading: any, idx: number) => {
-                          const sectionStart = idx;
-                          const nextHeadingIdx = articleData.structured.headings.findIndex((h: any, i: number) => i > idx && h.level <= heading.level);
-                          const sectionEnd = nextHeadingIdx === -1 ? articleData.structured.paragraphs.length : nextHeadingIdx + 5;
-                          
-                          const sectionParagraphs = articleData.structured.paragraphs.slice(sectionStart + 2, sectionEnd);
-                          
-                          if (heading.level <= 3 && sectionParagraphs.length > 0) {
-                            return (
-                              <div key={idx} className="space-y-4">
-                                {/* Section Heading */}
-                                {heading.level === 2 && (
-                                  <h2 className={`text-2xl font-bold border-b-2 pb-2 ${isDark ? 'text-gray-100 border-blue-600' : 'text-gray-900 border-blue-400'}`}>
-                                    {heading.text}
-                                  </h2>
-                                )}
-                                {heading.level === 3 && (
-                                  <h3 className={`text-xl font-semibold border-l-4 pl-3 ${isDark ? 'text-gray-200 border-blue-500' : 'text-gray-800 border-blue-400'}`}>
-                                    {heading.text}
-                                  </h3>
-                                )}
-                                {heading.level === 4 && (
-                                  <h4 className={`text-lg font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                    {heading.text}
-                                  </h4>
-                                )}
-                                
-                                {/* Section Content */}
-                                <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} space-y-3 break-words max-w-full`}>
-                                  {sectionParagraphs.slice(0, 3).map((paragraph, pIdx) => (
-                                    <div key={pIdx}>
-                                      {enhanceTextWithDefinitionCards(paragraph)}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          }
-                          return null;
-                        })}
-
-                        {/* Lists */}
-                        {articleData.structured.lists.slice(0, 3).map((list: any, idx: number) => (
-                          <div key={idx} className="space-y-2">
-                            {list.type === 'ul' ? (
-                              <ul className={`list-disc list-inside space-y-1 ${isDark ? 'text-gray-300' : 'text-gray-700'} border-l-2 ${isDark ? 'border-gray-600' : 'border-gray-300'} pl-4 break-words`}>
-                                {list.items.slice(0, 5).map((item: string, itemIdx: number) => (
-                                  <li key={itemIdx} className="text-sm break-words">
-                                    {enhanceTextWithDefinitionCards(item)}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <ol className={`list-decimal list-inside space-y-1 ${isDark ? 'text-gray-300' : 'text-gray-700'} border-l-2 ${isDark ? 'border-gray-600' : 'border-gray-300'} pl-4 break-words`}>
-                                {list.items.slice(0, 5).map((item: string, itemIdx: number) => (
-                                  <li key={itemIdx} className="text-sm break-words">
-                                    {enhanceTextWithDefinitionCards(item)}
-                                  </li>
-                                ))}
-                              </ol>
+                        {/* Actual Wikipedia Sections */}
+                        {articleData.structured.sections.map((section: any, idx: number) => (
+                          <div key={idx} className="space-y-4">
+                            {/* Section Heading */}
+                            {section.level === 2 && (
+                              <h2 className={`text-2xl font-bold border-b-2 pb-2 ${isDark ? 'text-gray-100 border-blue-600' : 'text-gray-900 border-blue-400'}`}>
+                                {section.heading}
+                              </h2>
                             )}
+                            {section.level === 3 && (
+                              <h3 className={`text-xl font-semibold border-l-4 pl-3 ${isDark ? 'text-gray-200 border-blue-500' : 'text-gray-800 border-blue-400'}`}>
+                                {section.heading}
+                              </h3>
+                            )}
+                            {section.level >= 4 && (
+                              <h4 className={`text-lg font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                {section.heading}
+                              </h4>
+                            )}
+                            
+                            {/* Section Content */}
+                            <div className={`text-base leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} space-y-4 break-words max-w-full`}>
+                              {section.content.map((item: any, itemIdx: number) => {
+                                if (item.type === 'paragraph') {
+                                  return (
+                                    <div key={itemIdx} className="space-y-2">
+                                      {enhanceTextWithDefinitionCards(item.content)}
+                                    </div>
+                                  );
+                                } else if (item.type === 'ul') {
+                                  return (
+                                    <ul key={itemIdx} className={`list-disc list-inside space-y-1 ${isDark ? 'text-gray-300' : 'text-gray-700'} border-l-2 ${isDark ? 'border-gray-600' : 'border-gray-300'} pl-4`}>
+                                      {item.items.map((listItem: string, liIdx: number) => (
+                                        <li key={liIdx} className="text-sm">
+                                          {enhanceTextWithDefinitionCards(listItem)}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  );
+                                } else if (item.type === 'ol') {
+                                  return (
+                                    <ol key={itemIdx} className={`list-decimal list-inside space-y-1 ${isDark ? 'text-gray-300' : 'text-gray-700'} border-l-2 ${isDark ? 'border-gray-600' : 'border-gray-300'} pl-4`}>
+                                      {item.items.map((listItem: string, liIdx: number) => (
+                                        <li key={liIdx} className="text-sm">
+                                          {enhanceTextWithDefinitionCards(listItem)}
+                                        </li>
+                                      ))}
+                                    </ol>
+                                  );
+                                }
+                                return null;
+                              })}
+                            </div>
                           </div>
                         ))}
                       </div>

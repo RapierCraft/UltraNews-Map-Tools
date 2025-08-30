@@ -1,13 +1,16 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Search, X, MapPin } from 'lucide-react';
+import { X, MapPin, Navigation, Search, Route, Globe } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
 interface SearchResult {
-  place_id: number;
+  place_id: number | string;
   lat: string;
   lon: string;
   display_name: string;
@@ -18,18 +21,113 @@ interface SearchResult {
   boundingbox?: string[];
   geojson?: GeoJSON.Geometry;
   class?: string;
+  source?: string;
 }
 
 interface SearchBarProps {
   onLocationSelect?: (result: SearchResult) => void;
   className?: string;
+  showModeSelector?: boolean;
 }
 
-// Simple in-memory cache for search results
-const searchCache = new Map<string, { data: SearchResult[], timestamp: number }>();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+// Enhanced in-memory cache for search results  
+const searchCache = new globalThis.Map<string, { data: SearchResult[], timestamp: number }>();
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes for longer persistence
 
-export default function SearchBar({ onLocationSelect, className = '' }: SearchBarProps) {
+// Multiple free geocoding APIs for parallel requests
+const geocodingAPIs = [
+  {
+    name: 'nominatim',
+    search: async (query: string, signal: AbortSignal) => {
+      const params = new URLSearchParams({
+        format: 'json',
+        q: query,
+        limit: '5',
+        addressdetails: '0',
+        extratags: '0', 
+        namedetails: '0',
+        polygon: '0'
+      });
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?${params.toString()}`,
+        { signal, headers: { 'User-Agent': 'MapMap/1.0' } }
+      );
+      const data = await response.json();
+      return data.map((item: Record<string, any>) => ({
+        place_id: item.place_id,
+        lat: item.lat,
+        lon: item.lon,
+        display_name: item.display_name,
+        type: item.type,
+        importance: item.importance || 0,
+        osm_type: item.osm_type,
+        osm_id: item.osm_id,
+        source: 'nominatim'
+      }));
+    }
+  },
+  {
+    name: 'photon',
+    search: async (query: string, signal: AbortSignal) => {
+      const params = new URLSearchParams({
+        q: query,
+        limit: '5',
+        lang: 'en'
+      });
+      const response = await fetch(
+        `https://photon.komoot.io/api/?${params.toString()}`,
+        { signal }
+      );
+      const data = await response.json();
+      return data.features?.map((item: Record<string, any>) => ({
+        place_id: `photon_${item.properties.osm_id}`,
+        lat: item.geometry.coordinates[1].toString(),
+        lon: item.geometry.coordinates[0].toString(),
+        display_name: item.properties.name + (item.properties.state ? `, ${item.properties.state}` : '') + (item.properties.country ? `, ${item.properties.country}` : ''),
+        type: item.properties.osm_key,
+        importance: item.properties.osm_type === 'city' ? 0.8 : 0.5,
+        osm_type: item.properties.osm_type,
+        osm_id: item.properties.osm_id,
+        source: 'photon'
+      })) || [];
+    }
+  },
+  {
+    name: 'locationiq',
+    search: async (query: string, signal: AbortSignal) => {
+      const params = new URLSearchParams({
+        format: 'json',
+        q: query,
+        limit: '5',
+        addressdetails: '0',
+        normalizecity: '1'
+      });
+      // LocationIQ free tier (no API key required for basic usage)
+      const response = await fetch(
+        `https://us1.locationiq.com/v1/search?${params.toString()}`,
+        { signal, headers: { 'User-Agent': 'MapMap/1.0' } }
+      );
+      if (response.status === 429) {
+        // Rate limited - return empty results
+        return [];
+      }
+      const data = await response.json();
+      return data.map((item: Record<string, any>) => ({
+        place_id: `locationiq_${item.place_id}`,
+        lat: item.lat,
+        lon: item.lon,
+        display_name: item.display_name,
+        type: item.type || item.class,
+        importance: item.importance || 0.6,
+        osm_type: item.osm_type,
+        osm_id: item.osm_id,
+        source: 'locationiq'
+      }));
+    }
+  }
+];
+
+export default function SearchBar({ onLocationSelect, className = '', showModeSelector = true }: SearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,6 +137,7 @@ export default function SearchBar({ onLocationSelect, className = '' }: SearchBa
   const resultsRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const router = useRouter();
 
   // Close results when clicking outside
   useEffect(() => {
@@ -52,20 +151,10 @@ export default function SearchBar({ onLocationSelect, className = '' }: SearchBa
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+
   const searchLocation = useCallback(async (searchQuery: string) => {
-    // Allow searches with 1+ characters for faster results
     if (searchQuery.length < 1) {
       setResults([]);
-      return;
-    }
-
-    // Check cache first
-    const cacheKey = searchQuery.toLowerCase();
-    const cached = searchCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      setResults(cached.data);
-      setShowResults(true);
-      setSelectedIndex(-1);
       return;
     }
 
@@ -76,56 +165,62 @@ export default function SearchBar({ onLocationSelect, className = '' }: SearchBa
 
     // Create new abort controller for this request
     abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
 
     setIsLoading(true);
+    console.log('Starting search for:', searchQuery);
+
     try {
-      // Minimal params for fastest search response
+      // Simple Nominatim search for debugging
       const params = new URLSearchParams({
         format: 'json',
         q: searchQuery,
-        limit: '7',
-        // Don't fetch any heavy data during search - just the basics
-        addressdetails: '0',
+        limit: '8',
+        addressdetails: '1',
         extratags: '0', 
         namedetails: '0',
-        // No polygon data at all during search
         polygon: '0'
       });
-
+      
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?${params.toString()}`,
-        { signal: abortControllerRef.current.signal }
+        { 
+          signal, 
+          headers: { 'User-Agent': 'MapMap/1.0' },
+          mode: 'cors'
+        }
       );
       
-      if (!response.ok) throw new Error('Search failed');
-      
-      const data = await response.json();
-      
-      // Sort results by importance for better relevance
-      const sortedData = data.sort((a: SearchResult, b: SearchResult) => 
-        (b.importance || 0) - (a.importance || 0)
-      );
-      
-      // Cache the results
-      searchCache.set(cacheKey, {
-        data: sortedData,
-        timestamp: Date.now()
-      });
-      
-      // Clean old cache entries
-      if (searchCache.size > 100) {
-        const oldestKey = searchCache.keys().next().value;
-        searchCache.delete(oldestKey);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      setResults(sortedData);
+      const data = await response.json();
+      console.log('Search response:', data);
+      
+      const searchResults = data.map((item: any) => ({
+        place_id: item.place_id,
+        lat: item.lat,
+        lon: item.lon,
+        display_name: item.display_name,
+        type: item.type,
+        class: item.class,
+        importance: item.importance || 0,
+        osm_type: item.osm_type,
+        osm_id: item.osm_id,
+        boundingbox: item.boundingbox,
+        source: 'nominatim'
+      }));
+
+      setResults(searchResults);
       setShowResults(true);
-      setSelectedIndex(-1); // Reset selection when new results arrive
+      setSelectedIndex(-1);
+      console.log('Search results set:', searchResults);
+
     } catch (error: unknown) {
-      // Error handled silently
       const err = error as Error;
       if (err.name !== 'AbortError') {
-        // Error handled silently  
+        console.error('Search error:', err);
       }
       setResults([]);
     } finally {
@@ -137,15 +232,51 @@ export default function SearchBar({ onLocationSelect, className = '' }: SearchBa
     const value = e.target.value;
     setQuery(value);
 
-    // Debounce search with faster response time
+    // Advanced debouncing with predictive search
     if (searchTimeout.current) {
       clearTimeout(searchTimeout.current);
     }
 
     if (value.trim()) {
-      // No debounce for 1-2 character searches (countries/states)
-      // Short debounce for longer searches to avoid spam
-      const delay = value.length <= 2 ? 0 : 100;
+      // Instant search for very short queries (country codes, state abbreviations)
+      if (value.length <= 2) {
+        searchLocation(value);
+        return;
+      }
+
+      // Check if this is likely a continuation of previous search
+      const previousQuery = query.toLowerCase();
+      const newQuery = value.toLowerCase();
+      const isExtension = newQuery.startsWith(previousQuery) && newQuery.length > previousQuery.length;
+      
+      // Shorter debounce for query extensions (user still typing same location)
+      const delay = isExtension ? 50 : 150;
+      
+      // Check cache immediately for exact or partial matches
+      const cacheKey = newQuery;
+      const cached = searchCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        setResults(cached.data);
+        setShowResults(true);
+        setSelectedIndex(-1);
+        return;
+      }
+
+      // Look for cached partial matches for instant suggestions
+      for (const [key, cachedData] of searchCache.entries()) {
+        if (key.startsWith(newQuery) && Date.now() - cachedData.timestamp < CACHE_DURATION) {
+          // Show partial results immediately while waiting for real search
+          const partialResults = cachedData.data.filter(result => 
+            result.display_name.toLowerCase().includes(newQuery)
+          );
+          if (partialResults.length > 0) {
+            setResults(partialResults);
+            setShowResults(true);
+            setSelectedIndex(-1);
+          }
+          break;
+        }
+      }
       
       searchTimeout.current = setTimeout(() => {
         searchLocation(value);
@@ -217,7 +348,68 @@ export default function SearchBar({ onLocationSelect, className = '' }: SearchBa
   return (
     <div className={`relative ${className}`} ref={resultsRef}>
       <div className="relative flex items-center">
-        <Search className="absolute left-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+        {showModeSelector ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute left-1 h-8 w-8 z-10 hover:bg-accent"
+              >
+                <Image
+                  src="/logo.png"
+                  alt="UltraMaps"
+                  width={20}
+                  height={20}
+                  className="h-5 w-5"
+                />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem 
+                onClick={() => router.push('/')}
+                className="cursor-pointer"
+              >
+                <Globe className="mr-2 h-4 w-4" />
+                <span>Map View</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => router.push('/navigation')}
+                className="cursor-pointer"
+              >
+                <Navigation className="mr-2 h-4 w-4" />
+                <span>Navigation</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => {
+                  inputRef.current?.focus();
+                }}
+                className="cursor-pointer"
+              >
+                <Search className="mr-2 h-4 w-4" />
+                <span>Search Locations</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => {
+                  // Future: Add route planning mode
+                  router.push('/navigation');
+                }}
+                className="cursor-pointer"
+              >
+                <Route className="mr-2 h-4 w-4" />
+                <span>Route Planning</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Image
+            src="/logo.png"
+            alt="UltraMaps"
+            width={24}
+            height={24}
+            className="absolute left-2 h-6 w-6 pointer-events-none"
+          />
+        )}
         <Input
           ref={inputRef}
           type="text"
@@ -225,7 +417,7 @@ export default function SearchBar({ onLocationSelect, className = '' }: SearchBa
           value={query}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          className="pl-10 pr-10 h-10 bg-background border-border shadow-sm"
+          className="pl-12 pr-10 h-10 bg-background border-border shadow-sm"
           autoComplete="off"
         />
         {query && (

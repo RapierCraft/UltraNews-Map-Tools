@@ -137,3 +137,77 @@
   @apply text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline cursor-pointer bg-transparent border-none p-0 transition-colors;
   font: inherit;
 }
+
+/* CesiumJS Widget Styles */
+.cesium-viewer {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+}
+
+.cesium-widget {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Ensure Cesium canvas takes full space */
+.cesium-widget canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Hide Cesium default UI elements we don't want */
+.cesium-viewer-toolbar,
+.cesium-viewer-cesiumInspectorContainer,
+.cesium-viewer-bottom {
+  display: none !important;
+}
+
+/* UltraMaps logo glow animation */
+@keyframes logo-glow {
+  0% { 
+    filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.4)) drop-shadow(0 0 20px rgba(147, 51, 234, 0.3)); 
+  }
+  100% { 
+    filter: drop-shadow(0 0 30px rgba(59, 130, 246, 0.8)) drop-shadow(0 0 60px rgba(147, 51, 234, 0.6)); 
+  }
+}
+
+.logo-glow {
+  animation: logo-glow 2s ease-in-out infinite alternate;
+}
+
+/* Animated stars for loading screen */
+.star {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: white;
+  border-radius: 50%;
+  animation: twinkle 3s ease-in-out infinite;
+  box-shadow: 0 0 2px rgba(255, 255, 255, 0.8);
+}
+
+@keyframes twinkle {
+  0%, 100% { 
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  50% { 
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.star:nth-child(3n) {
+  width: 1px;
+  height: 1px;
+  animation-duration: 4s;
+}
+
+.star:nth-child(5n) {
+  width: 3px;
+  height: 3px;
+  animation-duration: 5s;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.9);
+}

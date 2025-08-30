@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import ZoomControl from './ZoomControl';
 import MapController from './MapController';
 import BorderOverlay from './BorderOverlay';
+import TimezoneOverlay from './TimezoneOverlay';
 
 // Fix for default markers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -135,7 +136,9 @@ export default function SimpleMapContainer({
       className={`w-full h-full ${className} ${isDarkTheme ? 'dark-map' : ''}`}
       style={{ ...style }}
       maxZoom={selectedLayer.maxZoom || 19}
-      minZoom={2}
+      minZoom={3}
+      maxBounds={[[-85, -180], [85, 180]]}
+      maxBoundsViscosity={1.0}
       zoomControl={false}
     >
       <MapController center={center} zoom={zoom} boundsToFit={boundsToFit} />
@@ -149,6 +152,9 @@ export default function SimpleMapContainer({
         url={selectedLayer.url}
         maxZoom={selectedLayer.maxZoom || 19}
       />
+      
+      {/* Timezone overlay */}
+      <TimezoneOverlay enabled={true} isDarkTheme={isDarkTheme} />
       
       {/* Border overlay */}
       {borderSettings.enabled && selectedLocation && (

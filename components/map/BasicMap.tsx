@@ -1,17 +1,14 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import LoadingScreen from './LoadingScreen';
 
-const SimpleMapContainer = dynamic(
-  () => import('./SimpleMapContainer'),
+const VectorCesiumWrapper = dynamic(
+  () => import('./VectorCesiumWrapper'),
   { 
     ssr: false,
-    loading: () => (
-      <div className="w-full h-full bg-gray-100 animate-pulse flex items-center justify-center">
-        <p className="text-gray-500">Loading map...</p>
-      </div>
-    )
+    loading: () => <LoadingScreen />
   }
 );
 import MapControls from './MapControls';
@@ -21,13 +18,14 @@ import DraggableInfoModal from './DraggableInfoModal';
 import LocationInfoModal from './LocationInfoModal';
 import FullArticleModal from './FullArticleModal';
 import { Card } from '@/components/ui/card';
-import { MapPin, Navigation } from 'lucide-react';
+import { MapPin, Navigation, Globe, Map } from 'lucide-react';
 
 interface Marker {
   id: string;
   position: [number, number];
   popup?: string;
   timestamp?: Date;
+  accuracy?: number;
 }
 
 interface BorderSettings {
@@ -45,7 +43,19 @@ export default function BasicMap() {
   const [zoom, setZoom] = useState(12);
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [currentLayer, setCurrentLayer] = useState('osm-standard');
+  const [useVectorTiles, setUseVectorTiles] = useState(true);
+  const [mapHeading, setMapHeading] = useState(0);
+  const cesiumViewerRef = useRef<unknown>(null);
+  const [dataLayers, setDataLayers] = useState({
+    roads: true,
+    buildings: false,
+    waterways: true,
+    parks: true,
+    labels: true,
+    poi: true
+  });
   const [isDarkTheme, setIsDarkTheme] = useState(false);
+  const [showBuildings, setShowBuildings] = useState(true);
   const [selectedLocation, setSelectedLocation] = useState<{ 
     lat: number; 
     lon: number; 
@@ -70,11 +80,35 @@ export default function BasicMap() {
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [modalSourcePosition, setModalSourcePosition] = useState<{ x: number; y: number } | null>(null);
   const [showFullArticle, setShowFullArticle] = useState(false);
+  const [manualLayerSelection, setManualLayerSelection] = useState(false);
 
   // Handle theme change
   const handleThemeChange = useCallback((isDark: boolean) => {
     setIsDarkTheme(isDark);
-    setCurrentLayer('osm-standard'); // Always use OSM standard with CSS filters
+    // Only auto-switch if user hasn't manually selected a layer
+    if (!manualLayerSelection) {
+      if (isDark && currentLayer === 'osm-standard') {
+        setCurrentLayer('osm-dark');
+      } else if (!isDark && currentLayer === 'osm-dark') {
+        setCurrentLayer('osm-standard');
+      }
+    }
+  }, [currentLayer, manualLayerSelection]);
+
+  // Handle layer change and sync theme state
+  const handleLayerChange = useCallback((layer: string) => {
+    console.log('Layer change requested:', layer);
+    setManualLayerSelection(true); // Mark as manual selection
+    setCurrentLayer(layer);
+    // Update theme state to match layer selection
+    if (layer === 'osm-dark') {
+      console.log('Setting theme to dark');
+      setIsDarkTheme(true);
+    } else if (layer === 'osm-standard') {
+      console.log('Setting theme to light');
+      setIsDarkTheme(false);
+    }
+    // For satellite, keep current theme state
   }, []);
 
   // Get user location
@@ -87,21 +121,54 @@ export default function BasicMap() {
             position.coords.longitude
           ];
           setCenter(newCenter);
-          setZoom(15);
           
-          // Add user location marker
+          // Calculate zoom based on accuracy - larger accuracy areas need lower zoom
+          const accuracy = position.coords.accuracy || 50;
+          let appropriateZoom;
+          if (accuracy > 1000) appropriateZoom = 11;      // Very low accuracy
+          else if (accuracy > 500) appropriateZoom = 12;  // Low accuracy  
+          else if (accuracy > 200) appropriateZoom = 13;  // Medium accuracy
+          else if (accuracy > 100) appropriateZoom = 14;  // Good accuracy
+          else if (accuracy > 50) appropriateZoom = 15;   // High accuracy
+          else appropriateZoom = 16;                      // Very high accuracy
+          
+          setZoom(appropriateZoom);
+          
+          // Add user location marker with special type
           const userMarker: Marker = {
             id: 'user-location',
             position: newCenter,
-            popup: 'Your current location'
+            popup: `Your current location (±${Math.round(position.coords.accuracy || 0)}m accuracy)`,
+            accuracy: position.coords.accuracy || 50
           };
           setMarkers(prev => [...prev.filter(m => m.id !== 'user-location'), userMarker]);
         },
         (error) => {
           console.error('Error getting location:', error);
-          alert('Unable to get your location. Please check your browser permissions.');
+          let errorMessage = 'Unable to get your location. ';
+          switch(error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage += 'Please allow location access in your browser.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage += 'Location information is unavailable.';
+              break;
+            case error.TIMEOUT:
+              errorMessage += 'Location request timed out.';
+              break;
+            default:
+              errorMessage += 'Please check your browser permissions.';
+          }
+          alert(errorMessage);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 30000
         }
       );
+    } else {
+      alert('Geolocation is not supported by this browser.');
     }
   }, []);
 
@@ -133,6 +200,9 @@ export default function BasicMap() {
       class: result.class
     };
 
+    console.log('Search result data:', result);
+    console.log('Location data set:', locationData);
+
     setSelectedLocation(locationData);
 
     // Show advanced modal for administrative areas and notable places
@@ -143,7 +213,10 @@ export default function BasicMap() {
       result.type === 'town' ||
       result.type === 'village' ||
       result.type === 'state' ||
-      result.type === 'country';
+      result.type === 'country' ||
+      result.type === 'administrative';
+      
+    console.log('Should show modal:', shouldShowModal, 'Class:', result.class, 'Type:', result.type);
       
     if (shouldShowModal) {
       // Calculate center of screen for modal source position
@@ -152,6 +225,7 @@ export default function BasicMap() {
         y: window.innerHeight / 2 
       });
       setShowLocationModal(true);
+      console.log('Modal should be opening now');
     }
 
     // Add marker for specific locations
@@ -180,8 +254,26 @@ export default function BasicMap() {
         [parseFloat(result.boundingbox[1]), parseFloat(result.boundingbox[3])]
       ];
       setCenter(newCenter);
-      setZoom(15);
+      
+      // Calculate appropriate zoom level based on bounding box size
+      const latDiff = Math.abs(parseFloat(result.boundingbox[1]) - parseFloat(result.boundingbox[0]));
+      const lonDiff = Math.abs(parseFloat(result.boundingbox[3]) - parseFloat(result.boundingbox[2]));
+      const maxDiff = Math.max(latDiff, lonDiff);
+      
+      // Calculate zoom based on area size - larger areas get lower zoom
+      let calculatedZoom;
+      if (maxDiff > 50) calculatedZoom = 3;        // Countries/continents
+      else if (maxDiff > 20) calculatedZoom = 4;   // Large countries
+      else if (maxDiff > 10) calculatedZoom = 5;   // Medium countries/states
+      else if (maxDiff > 5) calculatedZoom = 6;    // Small states/large cities
+      else if (maxDiff > 2) calculatedZoom = 8;    // Cities
+      else if (maxDiff > 1) calculatedZoom = 10;   // Small cities
+      else if (maxDiff > 0.1) calculatedZoom = 12; // Districts
+      else calculatedZoom = 15;                     // Small areas
+      
+      setZoom(calculatedZoom);
       setBoundsToFit(bounds);
+      console.log(`Fitting bounds for ${result.display_name}: zoom=${calculatedZoom}, bounds=`, bounds);
     } else {
       setCenter(newCenter);
       setZoom(15);
@@ -189,9 +281,9 @@ export default function BasicMap() {
     }
   }, []);
 
-  // Handle POI click to show information modal
-  const handleMapClick = useCallback(async (e: { latlng: { lat: number; lng: number } }) => {
-    const { lat, lng } = e.latlng;
+  // Handle POI click to show information modal (adapted for Cesium)
+  const handleMapClick = useCallback(async (e: { position: { latitude: number; longitude: number }; screenPosition?: { x: number; y: number } }) => {
+    const { latitude: lat, longitude: lng } = e.position;
     
     try {
       // Fetch POI data from OpenStreetMap Overpass API
@@ -228,7 +320,7 @@ export default function BasicMap() {
             };
             
             setSelectedLocation(locationData);
-            setModalSourcePosition({ x: e.originalEvent?.clientX || window.innerWidth / 2, y: e.originalEvent?.clientY || window.innerHeight / 2 });
+            setModalSourcePosition(e.screenPosition || { x: window.innerWidth / 2, y: window.innerHeight / 2 });
             setShowLocationModal(true);
           }
         }
@@ -243,70 +335,72 @@ export default function BasicMap() {
     setMarkers([]);
   }, []);
 
+  // Handle compass click to reset map bearing
+  const handleCompassClick = useCallback(() => {
+    if (cesiumViewerRef.current && window.Cesium) {
+      const camera = cesiumViewerRef.current.camera;
+      const currentPosition = camera.position.clone();
+      
+      camera.flyTo({
+        destination: currentPosition,
+        orientation: {
+          heading: 0.0,
+          pitch: window.Cesium.Math.toRadians(-90),
+          roll: 0.0
+        },
+        duration: 0.5
+      });
+    }
+  }, []);
+
   return (
     <div className="relative w-full h-full">
       {/* Top Bar */}
       <div className="absolute top-4 left-4 right-4 z-[1000] flex gap-4">
         {/* Search Bar */}
         <div className="flex-1 max-w-md">
-          <SearchBar onLocationSelect={handleLocationSelect} />
+          <SearchBar 
+            onLocationSelect={handleLocationSelect} 
+            showModeSelector={true}
+          />
         </div>
 
-        {/* Quick Actions */}
-        <Card className="px-4 py-2 bg-white/90 dark:bg-gray-800/90 backdrop-blur flex items-center gap-3">
-          <button
-            onClick={handleLocate}
-            className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
-            title="Get my location"
-          >
-            <Navigation className="h-4 w-4" />
-            My Location
-          </button>
-          
-          {markers.length > 0 && (
-            <>
-              <div className="w-px h-5 bg-gray-300 dark:bg-gray-600" />
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                <MapPin className="inline h-3 w-3 mr-1" />
-                {markers.length} marker{markers.length !== 1 ? 's' : ''}
-              </span>
-              <button
-                onClick={clearMarkers}
-                className="text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
-              >
-                Clear
-              </button>
-            </>
-          )}
-        </Card>
 
         {/* Theme Toggle */}
         <SimpleThemeToggle onThemeChange={handleThemeChange} />
       </div>
 
-      {/* Map Controls */}
+      {/* Map Controls for tile layer selection */}
       <MapControls
         onLocate={handleLocate}
-        onLayerChange={setCurrentLayer}
-        onDataLayersChange={() => {}}
+        onLayerChange={handleLayerChange}
+        onDataLayersChange={setDataLayers}
         onBorderSettingsChange={setBorderSettings}
+        onBuildingsToggle={setShowBuildings}
+        onCompassClick={handleCompassClick}
         currentLayer={currentLayer}
         isDarkTheme={isDarkTheme}
         borderSettings={borderSettings}
+        showBuildings={showBuildings}
+        mapHeading={mapHeading}
       />
 
-      {/* Map */}
-      <SimpleMapContainer
+      {/* Vector-Enhanced Cesium Globe */}
+      <VectorCesiumWrapper
         center={center}
         zoom={zoom}
         markers={markers}
-        tileLayer={currentLayer}
-        isDarkTheme={isDarkTheme}
         selectedLocation={selectedLocation}
-        borderSettings={borderSettings}
         boundsToFit={boundsToFit}
         className="w-full h-full"
         onClick={handleMapClick}
+        currentLayer={currentLayer}
+        isDarkTheme={isDarkTheme}
+        showBuildings={showBuildings}
+        useVectorTiles={useVectorTiles}
+        dataLayers={dataLayers}
+        onViewerReady={(viewer) => { cesiumViewerRef.current = viewer; }}
+        onHeadingChange={setMapHeading}
       />
 
       {/* Advanced Location Information Modal */}
@@ -341,7 +435,7 @@ export default function BasicMap() {
       {/* Instructions */}
       <Card className="absolute bottom-4 left-4 z-[1000] px-3 py-2 bg-white/90 dark:bg-gray-800/90 backdrop-blur">
         <p className="text-xs text-gray-600 dark:text-gray-400">
-          Click on map POIs to see information • Search for cities/places to explore • Use expand for full articles
+          3D Globe Mode • Interactive 3D terrain • Click POIs for info • Search to explore
         </p>
       </Card>
     </div>
