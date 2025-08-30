@@ -110,32 +110,34 @@ export default function TransitControls({
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
+                {/* Routes temporarily disabled to reduce API load */}
+                <div className="flex items-center justify-between opacity-50">
                   <div className="flex items-center gap-2">
                     <Route className="w-3 h-3" />
                     <Label htmlFor="show-routes" className="text-xs">
-                      Routes
+                      Routes (Coming Soon)
                     </Label>
                   </div>
                   <Switch
                     id="show-routes"
-                    checked={settings.showRoutes}
-                    onCheckedChange={(showRoutes) => updateSettings({ showRoutes })}
+                    checked={false}
+                    disabled={true}
                     size="sm"
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
+                {/* Real-time not available with OSM data */}
+                <div className="flex items-center justify-between opacity-50">
                   <div className="flex items-center gap-2">
                     <Clock className="w-3 h-3" />
                     <Label htmlFor="show-realtime" className="text-xs">
-                      Real-time
+                      Real-time (N/A)
                     </Label>
                   </div>
                   <Switch
                     id="show-realtime"
-                    checked={settings.showRealtime}
-                    onCheckedChange={(showRealtime) => updateSettings({ showRealtime })}
+                    checked={false}
+                    disabled={true}
                     size="sm"
                   />
                 </div>
@@ -221,13 +223,13 @@ export default function TransitControls({
 export const defaultTransitSettings: TransitSettings = {
   enabled: false,
   showStops: true,
-  showRoutes: true,
-  showRealtime: false,
+  showRoutes: false, // Disabled to reduce API load
+  showRealtime: false, // Not available with OSM data
   types: {
     subway: true,
     bus: true,
     rail: true,
-    ferry: true,
+    ferry: false, // Less common, disabled by default
     tram: true
   }
 };

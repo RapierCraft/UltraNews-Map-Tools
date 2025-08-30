@@ -60,29 +60,77 @@ export interface BoundingBox {
 
 class TransitService {
   private cache: Map<string, { data: unknown; timestamp: number }> = new Map();
-  private cacheTimeout = 5 * 60 * 1000; // 5 minutes
+  private cacheTimeout = 10 * 60 * 1000; // 10 minutes (longer cache)
+  private requestQueue: Map<string, Promise<unknown>> = new Map();
+  private lastRequestTime = 0;
+  private minRequestInterval = 2000; // 2 seconds between requests
+
+  /**
+   * Rate limited request wrapper
+   */
+  private async makeRateLimitedRequest(cacheKey: string, requestFn: () => Promise<unknown>): Promise<unknown> {
+    // Check cache first
+    const cached = this.getFromCache(cacheKey);
+    if (cached) return cached;
+    
+    // Check if request is already in progress
+    if (this.requestQueue.has(cacheKey)) {
+      return this.requestQueue.get(cacheKey)!;
+    }
+    
+    // Rate limiting - ensure minimum interval between requests
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    if (timeSinceLastRequest < this.minRequestInterval) {
+      await new Promise(resolve => setTimeout(resolve, this.minRequestInterval - timeSinceLastRequest));
+    }
+    
+    // Make the request
+    const requestPromise = requestFn();
+    this.requestQueue.set(cacheKey, requestPromise);
+    
+    try {
+      const result = await requestPromise;
+      this.setCache(cacheKey, result);
+      this.lastRequestTime = Date.now();
+      return result;
+    } finally {
+      this.requestQueue.delete(cacheKey);
+    }
+  }
 
   /**
    * Get transit stops within a bounding box using OpenStreetMap data
    */
   async getStopsInBounds(bounds: BoundingBox, limit = 100): Promise<TransitStop[]> {
-    const cacheKey = `stops_${bounds.minLat}_${bounds.minLon}_${bounds.maxLat}_${bounds.maxLon}`;
+    // Use rounded coordinates to improve cache hit rates
+    const roundedBounds = {
+      minLat: Math.round(bounds.minLat * 1000) / 1000,
+      minLon: Math.round(bounds.minLon * 1000) / 1000,
+      maxLat: Math.round(bounds.maxLat * 1000) / 1000,
+      maxLon: Math.round(bounds.maxLon * 1000) / 1000
+    };
     
-    // Check cache
-    const cached = this.getFromCache(cacheKey);
-    if (cached) return cached as TransitStop[];
+    const cacheKey = `stops_${roundedBounds.minLat}_${roundedBounds.minLon}_${roundedBounds.maxLat}_${roundedBounds.maxLon}`;
+    
+    return this.makeRateLimitedRequest(cacheKey, async () => {
+      return this.fetchStopsFromOverpass(roundedBounds, limit);
+    }) as Promise<TransitStop[]>;
+  }
 
+  /**
+   * Actual Overpass API call for stops
+   */
+  private async fetchStopsFromOverpass(bounds: BoundingBox, limit: number): Promise<TransitStop[]> {
     try {
-      // Overpass query for transit stops
+      // Simplified query to reduce server load
       const query = `
-        [out:json][timeout:25];
+        [out:json][timeout:15];
         (
-          node[public_transport~"^(stop_position|platform)$"](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
           node[highway=bus_stop](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
           node[railway~"^(station|halt|tram_stop)$"](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
-          node[amenity=ferry_terminal](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
         );
-        out geom ${Math.min(limit, 500)};
+        out geom ${Math.min(limit, 200)};
       `;
 
       const response = await fetch(OVERPASS_BASE_URL, {
@@ -92,6 +140,10 @@ class TransitService {
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          console.warn('Overpass API rate limit exceeded, returning cached data');
+          return [];
+        }
         console.error('Overpass API error:', response.status);
         return [];
       }
@@ -116,7 +168,6 @@ class TransitService {
           };
         });
 
-      this.setCache(cacheKey, stops);
       return stops;
     } catch (error) {
       console.error('Failed to fetch transit stops:', error);
@@ -126,82 +177,39 @@ class TransitService {
 
   /**
    * Get transit routes for a specific area using OpenStreetMap data
+   * Disabled temporarily to reduce API load
    */
   async getRoutesInBounds(bounds: BoundingBox, limit = 50): Promise<TransitRoute[]> {
-    const cacheKey = `routes_${bounds.minLat}_${bounds.minLon}_${bounds.maxLat}_${bounds.maxLon}`;
-    
-    const cached = this.getFromCache(cacheKey);
-    if (cached) return cached as TransitRoute[];
-
-    try {
-      // Overpass query for transit routes
-      const query = `
-        [out:json][timeout:25];
-        (
-          relation[type=route][route~"^(bus|tram|train|subway|light_rail|monorail|ferry)$"](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
-        );
-        out geom ${Math.min(limit, 100)};
-      `;
-
-      const response = await fetch(OVERPASS_BASE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'data=' + encodeURIComponent(query)
-      });
-
-      if (!response.ok) {
-        console.error('Overpass routes API error:', response.status);
-        return [];
-      }
-
-      const data = await response.json();
-      const routes: TransitRoute[] = (data.elements || [])
-        .slice(0, limit)
-        .map((element: Record<string, unknown>) => {
-          const tags = element.tags as Record<string, string> || {};
-          
-          return {
-            id: `osm_${element.id}`,
-            name: tags.name || tags.ref || 'Transit Route',
-            shortName: tags.ref,
-            type: this.getRouteTypeFromTags(tags),
-            color: tags.colour || this.getDefaultColor(this.getRouteTypeFromTags(tags)),
-            operator: tags.operator,
-            network: tags.network,
-            geometry: this.extractRouteGeometry(element)
-          };
-        });
-
-      this.setCache(cacheKey, routes);
-      return routes;
-    } catch (error) {
-      console.error('Failed to fetch transit routes:', error);
-      return [];
-    }
+    // Disable routes for now to reduce API load
+    console.log('Transit routes disabled to reduce API load');
+    return [];
   }
 
   /**
    * Get nearby transit stops from a point using OpenStreetMap data
    */
   async getNearbyStops(lat: number, lon: number, radius = 500, limit = 20): Promise<TransitStop[]> {
-    const cacheKey = `nearby_${lat}_${lon}_${radius}`;
+    const roundedLat = Math.round(lat * 1000) / 1000;
+    const roundedLon = Math.round(lon * 1000) / 1000;
+    const cacheKey = `nearby_${roundedLat}_${roundedLon}_${radius}`;
     
-    const cached = this.getFromCache(cacheKey);
-    if (cached) return cached as TransitStop[];
+    return this.makeRateLimitedRequest(cacheKey, async () => {
+      return this.fetchNearbyStopsFromOverpass(roundedLat, roundedLon, radius, limit);
+    }) as Promise<TransitStop[]>;
+  }
 
+  /**
+   * Actual Overpass API call for nearby stops
+   */
+  private async fetchNearbyStopsFromOverpass(lat: number, lon: number, radius: number, limit: number): Promise<TransitStop[]> {
     try {
-      // Convert radius to degrees (approximate)
-      const radiusDegrees = radius / 111320; // meters to degrees
-      
       const query = `
-        [out:json][timeout:25];
+        [out:json][timeout:15];
         (
-          node[public_transport~"^(stop_position|platform)$"](around:${radius},${lat},${lon});
           node[highway=bus_stop](around:${radius},${lat},${lon});
-          node[railway~"^(station|halt|tram_stop)$"](around:${radius},${lat},${lon});
-          node[amenity=ferry_terminal](around:${radius},${lat},${lon});
+          node[railway~"^(station|halt)$"](around:${radius},${lat},${lon});
         );
-        out geom ${Math.min(limit, 100)};
+        out geom ${Math.min(limit, 50)};
       `;
 
       const response = await fetch(OVERPASS_BASE_URL, {
@@ -211,6 +219,10 @@ class TransitService {
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          console.warn('Overpass API rate limit exceeded for nearby stops');
+          return [];
+        }
         console.error('Nearby stops API error:', response.status);
         return [];
       }
@@ -234,7 +246,6 @@ class TransitService {
           };
         });
 
-      this.setCache(cacheKey, stops);
       return stops;
     } catch (error) {
       console.error('Failed to fetch nearby stops:', error);

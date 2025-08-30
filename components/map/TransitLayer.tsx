@@ -27,22 +27,20 @@ export default function TransitLayer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load transit data when bounds change
+  // Load transit data when bounds change (with reduced frequency)
   useEffect(() => {
-    if (!bounds || zoom < 12) return; // Only load at high zoom levels
+    if (!bounds || zoom < 14) return; // Only load at higher zoom levels (14+)
 
     const loadTransitData = async () => {
       setLoading(true);
       setError(null);
       
       try {
-        const [stopsData, routesData] = await Promise.all([
-          showStops ? transitService.getStopsInBounds(bounds, 100) : Promise.resolve([]),
-          showRoutes ? transitService.getRoutesInBounds(bounds, 50) : Promise.resolve([])
-        ]);
+        // Only load stops, skip routes to reduce API load
+        const stopsData = showStops ? await transitService.getStopsInBounds(bounds, 50) : [];
 
         setStops(stopsData);
-        setRoutes(routesData);
+        setRoutes([]); // Disable routes to reduce API calls
       } catch (err) {
         console.error('Failed to load transit data:', err);
         setError('Failed to load transit data');
@@ -51,15 +49,17 @@ export default function TransitLayer({
       }
     };
 
-    loadTransitData();
-  }, [bounds, zoom, showStops, showRoutes]);
+    // Debounce API calls - only load after zoom/bounds have stabilized
+    const timer = setTimeout(loadTransitData, 1000);
+    return () => clearTimeout(timer);
+  }, [bounds, zoom, showStops]);
 
   // Convert stops and routes to GeoJSON
   const stopsGeoJSON = transitService.stopsToGeoJSON(stops);
   const routesGeoJSON = transitService.routesToGeoJSON(routes);
 
-  if (zoom < 12) {
-    return null; // Don't show transit data at low zoom levels
+  if (zoom < 14) {
+    return null; // Don't show transit data at low zoom levels (increased from 12 to 14)
   }
 
   return (
@@ -88,23 +88,24 @@ export default function TransitLayer({
 }
 
 // Hook for using transit data in map components
-export function useTransitData(bounds?: BoundingBox, zoom: number = 12) {
+export function useTransitData(bounds?: BoundingBox, zoom: number = 14) {
   const [stops, setStops] = useState<TransitStop[]>([]);
   const [routes, setRoutes] = useState<TransitRoute[]>([]);
   const [loading, setLoading] = useState(false);
 
   const loadData = useCallback(async () => {
-    if (!bounds || zoom < 12) return;
+    if (!bounds || zoom < 14) {
+      setStops([]);
+      setRoutes([]);
+      return;
+    }
 
     setLoading(true);
     try {
-      const [stopsData, routesData] = await Promise.all([
-        transitService.getStopsInBounds(bounds, 100),
-        transitService.getRoutesInBounds(bounds, 50)
-      ]);
-
+      // Only load stops to reduce API calls
+      const stopsData = await transitService.getStopsInBounds(bounds, 50);
       setStops(stopsData);
-      setRoutes(routesData);
+      setRoutes([]); // Disable routes
     } catch (error) {
       console.error('Failed to load transit data:', error);
     } finally {
@@ -113,7 +114,9 @@ export function useTransitData(bounds?: BoundingBox, zoom: number = 12) {
   }, [bounds, zoom]);
 
   useEffect(() => {
-    loadData();
+    // Debounce the API calls
+    const timer = setTimeout(loadData, 1500);
+    return () => clearTimeout(timer);
   }, [loadData]);
 
   return {
