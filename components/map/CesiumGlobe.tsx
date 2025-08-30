@@ -3,6 +3,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { getVectorCache } from '@/lib/vectorCache';
 
+interface NavigationRoute {
+  total_distance_m: number;
+  total_traffic_duration_s: number;
+  segments: Array<{
+    instructions: string;
+    distance_m: number;
+    traffic_duration_s: number;
+  }>;
+  overview_geometry: number[][];
+}
+
 interface CesiumGlobeProps {
   center?: [number, number];
   zoom?: number;
@@ -28,6 +39,8 @@ interface CesiumGlobeProps {
   currentLayer?: string;
   isDarkTheme?: boolean;
   showBuildings?: boolean;
+  navigationRoute?: NavigationRoute | null;
+  showTrafficOverlay?: boolean;
 }
 
 declare global {
@@ -46,7 +59,9 @@ export default function CesiumGlobe({
   onClick,
   currentLayer = 'osm-standard',
   isDarkTheme = false,
-  showBuildings = true
+  showBuildings = true,
+  navigationRoute = null,
+  showTrafficOverlay = false
 }: CesiumGlobeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<any>(null);
@@ -584,6 +599,88 @@ export default function CesiumGlobe({
       }
     });
   }, [markers, isLoaded]);
+
+  // Handle navigation route visualization
+  useEffect(() => {
+    if (!viewerRef.current || !window.Cesium || !isLoaded || !navigationRoute) return;
+    
+    const viewer = viewerRef.current;
+    
+    // Remove existing route entities
+    const routeEntities = viewer.entities.values.filter((entity: any) => 
+      entity.name && entity.name.startsWith('route-')
+    );
+    routeEntities.forEach((entity: any) => viewer.entities.remove(entity));
+    
+    if (navigationRoute && navigationRoute.overview_geometry && navigationRoute.overview_geometry.length > 0) {
+      // Convert route coordinates to Cesium Cartesian3 positions
+      const positions = navigationRoute.overview_geometry.map((coord: number[]) => {
+        // coord format: [longitude, latitude]
+        return window.Cesium.Cartesian3.fromDegrees(coord[0], coord[1]);
+      });
+      
+      // Add main route polyline
+      viewer.entities.add({
+        name: 'route-main',
+        polyline: {
+          positions: positions,
+          width: 8,
+          material: window.Cesium.Color.fromCssColorString('#2563eb'), // Blue route
+          clampToGround: true,
+          zIndex: 1000
+        }
+      });
+      
+      // Add route outline for better visibility
+      viewer.entities.add({
+        name: 'route-outline',
+        polyline: {
+          positions: positions,
+          width: 12,
+          material: window.Cesium.Color.fromCssColorString('#ffffff'),
+          clampToGround: true,
+          zIndex: 999
+        }
+      });
+      
+      // Add start marker (green)
+      if (positions.length > 0) {
+        viewer.entities.add({
+          name: 'route-start',
+          position: positions[0],
+          point: {
+            pixelSize: 12,
+            color: window.Cesium.Color.fromCssColorString('#10b981'),
+            outlineColor: window.Cesium.Color.WHITE,
+            outlineWidth: 3,
+            heightReference: window.Cesium.HeightReference.CLAMP_TO_GROUND
+          }
+        });
+      }
+      
+      // Add end marker (red)
+      if (positions.length > 1) {
+        viewer.entities.add({
+          name: 'route-end',
+          position: positions[positions.length - 1],
+          point: {
+            pixelSize: 12,
+            color: window.Cesium.Color.fromCssColorString('#ef4444'),
+            outlineColor: window.Cesium.Color.WHITE,
+            outlineWidth: 3,
+            heightReference: window.Cesium.HeightReference.CLAMP_TO_GROUND
+          }
+        });
+      }
+      
+      // Fit camera to route bounds
+      const boundingSphere = window.Cesium.BoundingSphere.fromPoints(positions);
+      viewer.camera.flyToBoundingSphere(boundingSphere, {
+        duration: 1.5,
+        offset: new window.Cesium.HeadingPitchRange(0, -window.Cesium.Math.PI_OVER_FOUR, 0)
+      });
+    }
+  }, [navigationRoute, isLoaded]);
 
   // Handle selected location highlighting
   useEffect(() => {

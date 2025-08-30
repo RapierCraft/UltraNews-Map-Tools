@@ -24,6 +24,17 @@ interface LayerState {
   poi: boolean;
 }
 
+interface NavigationRoute {
+  total_distance_m: number;
+  total_traffic_duration_s: number;
+  segments: Array<{
+    instructions: string;
+    distance_m: number;
+    traffic_duration_s: number;
+  }>;
+  overview_geometry: number[][];
+}
+
 interface VectorCesiumWrapperProps {
   center?: [number, number];
   zoom?: number;
@@ -55,6 +66,8 @@ interface VectorCesiumWrapperProps {
   dataLayers?: LayerState;
   onViewerReady?: (viewer: any) => void;
   onHeadingChange?: (heading: number) => void;
+  navigationRoute?: NavigationRoute | null;
+  showTrafficOverlay?: boolean;
 }
 
 export default function VectorCesiumWrapper(props: VectorCesiumWrapperProps) {

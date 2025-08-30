@@ -67,7 +67,10 @@ export default function NavigationPage() {
   return (
     <div className="relative w-full h-screen">
       {/* Full Globe Map with Navigation Overlay */}
-      <BasicMap />
+      <BasicMap 
+        navigationRoute={selectedRoute}
+        showTrafficOverlay={true}
+      />
 
       {/* Simplified Navigation Panel Overlay */}
       <div className="absolute top-20 left-4 z-[1001]">

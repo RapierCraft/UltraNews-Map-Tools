@@ -38,7 +38,23 @@ interface BorderSettings {
   };
 }
 
-export default function BasicMap() {
+interface NavigationRoute {
+  total_distance_m: number;
+  total_traffic_duration_s: number;
+  segments: Array<{
+    instructions: string;
+    distance_m: number;
+    traffic_duration_s: number;
+  }>;
+  overview_geometry: number[][];
+}
+
+interface BasicMapProps {
+  navigationRoute?: NavigationRoute | null;
+  showTrafficOverlay?: boolean;
+}
+
+export default function BasicMap({ navigationRoute, showTrafficOverlay }: BasicMapProps = {}) {
   const [center, setCenter] = useState<[number, number]>([40.7128, -74.0060]); // NYC default
   const [zoom, setZoom] = useState(12);
   const [markers, setMarkers] = useState<Marker[]>([]);
@@ -360,7 +376,12 @@ export default function BasicMap() {
         {/* Search Bar */}
         <div className="flex-1 max-w-md">
           <SearchBar 
-            onLocationSelect={handleLocationSelect} 
+            onLocationSelect={handleLocationSelect}
+            onRouteRequest={(origin, destination, mode) => {
+              // Convert to NavigationRoute format and trigger route calculation
+              console.log('Route requested:', { origin, destination, mode });
+              // This would trigger the SimpleNavigation component
+            }}
             showModeSelector={true}
           />
         </div>
@@ -401,6 +422,8 @@ export default function BasicMap() {
         dataLayers={dataLayers}
         onViewerReady={(viewer) => { cesiumViewerRef.current = viewer; }}
         onHeadingChange={setMapHeading}
+        navigationRoute={navigationRoute}
+        showTrafficOverlay={showTrafficOverlay}
       />
 
       {/* Advanced Location Information Modal */}

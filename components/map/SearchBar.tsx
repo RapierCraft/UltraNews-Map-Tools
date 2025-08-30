@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { X, MapPin, Navigation, Search, Route, Globe } from 'lucide-react';
+import { X, MapPin, Navigation, Search, Route, Globe, Car, Bus, Train, Bike, Users, Plane } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -24,10 +24,21 @@ interface SearchResult {
   source?: string;
 }
 
+type TransportMode = 'driving' | 'walking' | 'cycling' | 'transit' | 'flying';
+
+interface RoutePoint {
+  lat: number;
+  lon: number;
+  name: string;
+}
+
 interface SearchBarProps {
   onLocationSelect?: (result: SearchResult) => void;
+  onRouteRequest?: (origin: RoutePoint, destination: RoutePoint, mode: TransportMode) => void;
   className?: string;
   showModeSelector?: boolean;
+  navigationMode?: boolean;
+  onNavigationModeChange?: (isNavMode: boolean) => void;
 }
 
 // Enhanced in-memory cache for search results  
@@ -127,7 +138,22 @@ const geocodingAPIs = [
   }
 ];
 
-export default function SearchBar({ onLocationSelect, className = '', showModeSelector = true }: SearchBarProps) {
+const transportModes: Record<TransportMode, { icon: any; label: string; color: string }> = {
+  driving: { icon: Car, label: 'Car', color: 'text-blue-600' },
+  walking: { icon: Users, label: 'Walk', color: 'text-green-600' },
+  cycling: { icon: Bike, label: 'Cycle', color: 'text-orange-600' },
+  transit: { icon: Bus, label: 'Transit', color: 'text-purple-600' },
+  flying: { icon: Plane, label: 'Fly', color: 'text-sky-600' }
+};
+
+export default function SearchBar({ 
+  onLocationSelect, 
+  onRouteRequest,
+  className = '', 
+  showModeSelector = true,
+  navigationMode = false,
+  onNavigationModeChange
+}: SearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -138,6 +164,14 @@ export default function SearchBar({ onLocationSelect, className = '', showModeSe
   const inputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const router = useRouter();
+
+  // Navigation mode state
+  const [isNavigationMode, setIsNavigationMode] = useState(navigationMode);
+  const [fromLocation, setFromLocation] = useState<RoutePoint | null>(null);
+  const [toLocation, setToLocation] = useState<RoutePoint | null>(null);
+  const [selectedTransportMode, setSelectedTransportMode] = useState<TransportMode>('driving');
+  const [showToField, setShowToField] = useState(false);
+  const [currentField, setCurrentField] = useState<'from' | 'to'>('from');
 
   // Close results when clicking outside
   useEffect(() => {
@@ -328,14 +362,50 @@ export default function SearchBar({ onLocationSelect, className = '', showModeSe
   };
 
   const handleSelectLocation = (result: SearchResult) => {
-    setQuery(result.display_name);
-    setShowResults(false);
-    setResults([]);
-    setSelectedIndex(-1);
-    
-    if (onLocationSelect) {
-      onLocationSelect(result);
+    if (isNavigationMode) {
+      handleNavigationLocationSelect(result);
+    } else {
+      setQuery(result.display_name);
+      setShowResults(false);
+      setResults([]);
+      setSelectedIndex(-1);
+      
+      if (onLocationSelect) {
+        onLocationSelect(result);
+      }
     }
+  };
+
+  // Handle navigation location selection
+  const handleNavigationLocationSelect = (result: SearchResult) => {
+    const routePoint: RoutePoint = {
+      lat: parseFloat(result.lat),
+      lon: parseFloat(result.lon),
+      name: result.display_name.split(',')[0]
+    };
+
+    if (currentField === 'from') {
+      setFromLocation(routePoint);
+      setQuery(routePoint.name);
+      setCurrentField('to');
+      // Clear and focus on the "to" field
+      setTimeout(() => {
+        setQuery('');
+        inputRef.current?.focus();
+      }, 100);
+    } else {
+      setToLocation(routePoint);
+      setQuery(routePoint.name);
+      
+      // Both locations selected, trigger route request
+      if (fromLocation && onRouteRequest) {
+        onRouteRequest(fromLocation, routePoint, selectedTransportMode);
+      }
+    }
+
+    setResults([]);
+    setShowResults(false);
+    setSelectedIndex(-1);
   };
 
   const clearSearch = () => {
@@ -374,7 +444,11 @@ export default function SearchBar({ onLocationSelect, className = '', showModeSe
                 <span>Map View</span>
               </DropdownMenuItem>
               <DropdownMenuItem 
-                onClick={() => router.push('/navigation')}
+                onClick={() => {
+                  setIsNavigationMode(true);
+                  setShowToField(true);
+                  if (onNavigationModeChange) onNavigationModeChange(true);
+                }}
                 className="cursor-pointer"
               >
                 <Navigation className="mr-2 h-4 w-4" />
@@ -410,16 +484,83 @@ export default function SearchBar({ onLocationSelect, className = '', showModeSe
             className="absolute left-2 h-6 w-6 pointer-events-none"
           />
         )}
-        <Input
-          ref={inputRef}
-          type="text"
-          placeholder="Search for a location..."
-          value={query}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          className="pl-12 pr-10 h-10 bg-background border-border shadow-sm"
-          autoComplete="off"
-        />
+        {isNavigationMode ? (
+          <div className="flex-1 space-y-2">
+            {/* From Field */}
+            <div className="relative">
+              <div className="absolute left-12 top-2 z-10 text-xs text-muted-foreground font-medium">From</div>
+              <Input
+                ref={currentField === 'from' ? inputRef : undefined}
+                type="text"
+                placeholder={currentField === 'from' ? "Enter starting location..." : (fromLocation?.name || "Starting location")}
+                value={currentField === 'from' ? query : (fromLocation?.name || '')}
+                onChange={currentField === 'from' ? handleInputChange : undefined}
+                onKeyDown={currentField === 'from' ? handleKeyDown : undefined}
+                onFocus={() => setCurrentField('from')}
+                className={`pl-12 pr-10 pt-5 pb-2 h-12 bg-background border-border shadow-sm transition-all ${
+                  currentField === 'from' ? 'border-blue-500 ring-1 ring-blue-500' : ''
+                }`}
+                autoComplete="off"
+                readOnly={currentField !== 'from'}
+              />
+            </div>
+            
+            {/* To Field - Animated Entry */}
+            <div className={`relative transform transition-all duration-300 ${
+              showToField ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-2 opacity-0 scale-95'
+            }`}>
+              <div className="absolute left-12 top-2 z-10 text-xs text-muted-foreground font-medium">To</div>
+              <Input
+                ref={currentField === 'to' ? inputRef : undefined}
+                type="text"
+                placeholder={currentField === 'to' ? "Enter destination..." : (toLocation?.name || "Destination")}
+                value={currentField === 'to' ? query : (toLocation?.name || '')}
+                onChange={currentField === 'to' ? handleInputChange : undefined}
+                onKeyDown={currentField === 'to' ? handleKeyDown : undefined}
+                onFocus={() => setCurrentField('to')}
+                className={`pl-12 pr-10 pt-5 pb-2 h-12 bg-background border-border shadow-sm transition-all ${
+                  currentField === 'to' ? 'border-blue-500 ring-1 ring-blue-500' : ''
+                }`}
+                autoComplete="off"
+                readOnly={currentField !== 'to'}
+              />
+            </div>
+            
+            {/* Transport Mode Selector */}
+            <div className="flex justify-center mt-3">
+              <div className="flex gap-1 p-1 bg-muted rounded-lg">
+                {Object.entries(transportModes).map(([mode, config]) => {
+                  const IconComponent = config.icon;
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => setSelectedTransportMode(mode as TransportMode)}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                        selectedTransportMode === mode
+                          ? 'bg-white shadow-sm text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <IconComponent className={`h-3 w-3 ${config.color}`} />
+                      {config.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <Input
+            ref={inputRef}
+            type="text"
+            placeholder="Search for a location..."
+            value={query}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            className="pl-12 pr-10 h-10 bg-background border-border shadow-sm"
+            autoComplete="off"
+          />
+        )}
         {query && (
           <Button
             size="icon"
