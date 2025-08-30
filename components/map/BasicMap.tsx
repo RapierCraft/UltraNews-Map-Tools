@@ -53,7 +53,7 @@ interface BasicMapProps {
   navigationRoute?: NavigationRoute | null;
   showTrafficOverlay?: boolean;
   navigationMode?: boolean;
-  onRouteRequest?: (route: NavigationRoute) => void;
+  onRouteRequest?: (route: NavigationRoute, origin?: any, destination?: any) => void;
   onNavigationStart?: (origin: any, destination: any) => void;
 }
 
@@ -418,7 +418,7 @@ export default function BasicMap({
                     setCalculatedRoute(route);
                     
                     if (onRouteRequest) {
-                      onRouteRequest(route);
+                      onRouteRequest(route, origin, destination);
                     }
                     return;
                   }
@@ -454,7 +454,7 @@ export default function BasicMap({
                   
                   setCalculatedRoute(route);
                   if (onRouteRequest) {
-                    onRouteRequest(route);
+                    onRouteRequest(route, origin, destination);
                   }
                 }
               } catch (error) {
