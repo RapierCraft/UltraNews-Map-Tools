@@ -17,6 +17,7 @@ import SimpleThemeToggle from '@/components/SimpleThemeToggle';
 import DraggableInfoModal from './DraggableInfoModal';
 import LocationInfoModal from './LocationInfoModal';
 import FullArticleModal from './FullArticleModal';
+import TransitControls, { defaultTransitSettings } from './TransitControls';
 import { Card } from '@/components/ui/card';
 import { MapPin, Navigation, Globe, Map } from 'lucide-react';
 import { 
@@ -69,6 +70,7 @@ interface BasicMapProps {
   navigationRoute?: NavigationRoute | null;
   showTrafficOverlay?: boolean;
   navigationMode?: boolean;
+  hideControls?: boolean;
   onRouteRequest?: (route: NavigationRoute, origin?: any, destination?: any) => void;
   onNavigationStart?: (origin: any, destination: any) => void;
 }
@@ -77,6 +79,7 @@ export default function BasicMap({
   navigationRoute, 
   showTrafficOverlay, 
   navigationMode = false,
+  hideControls = false,
   onRouteRequest,
   onNavigationStart 
 }: BasicMapProps = {}) {
@@ -397,13 +400,14 @@ export default function BasicMap({
 
   return (
     <div className="relative w-full h-full">
-      {/* Top Bar */}
-      <div className="absolute top-4 left-4 right-4 z-[1000] flex gap-4">
-        {/* Search Bar */}
-        <div className="flex-1 max-w-md">
-          <SearchBar 
-            onLocationSelect={handleLocationSelect}
-            onRouteRequest={async (origin, destination, mode) => {
+      {/* Top Bar - Hide during live navigation */}
+      {!hideControls && (
+        <div className="absolute top-4 left-4 right-4 z-[1000] flex gap-4">
+          {/* Search Bar */}
+          <div className="flex-1 max-w-md">
+            <SearchBar 
+              onLocationSelect={handleLocationSelect}
+              onRouteRequest={async (origin, destination, mode) => {
               // Calculate route using the backend API
               console.log('Route calculation requested:', { origin, destination, mode });
               try {
@@ -511,7 +515,8 @@ export default function BasicMap({
 
         {/* Theme Toggle */}
         <SimpleThemeToggle onThemeChange={handleThemeChange} />
-      </div>
+        </div>
+      )}
 
       {/* Map Controls for tile layer selection */}
       <MapControls

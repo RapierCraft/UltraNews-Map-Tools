@@ -110,6 +110,7 @@ export default function Home() {
     <div className="w-screen h-screen relative">
       <BasicMap 
         onRouteRequest={handleRouteSelect}
+        hideControls={showLiveNavigation}
       />
 
       {/* Pre-Navigation Screen */}
