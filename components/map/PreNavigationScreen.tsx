@@ -224,9 +224,8 @@ export default function PreNavigationScreen({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm">
-      <div className="fixed inset-x-4 inset-y-4 md:inset-x-auto md:inset-y-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:max-w-3xl w-full md:w-[90vw] max-h-[90vh]">
-        <Card className="w-full h-full flex flex-col shadow-xl">
+    <div className="fixed right-0 top-0 bottom-0 z-50 w-[480px] max-w-[40vw]">
+      <Card className="w-full h-full flex flex-col shadow-xl border-l-2">
           {/* Header */}
           <div className="p-4 border-b">
             <div className="flex items-start justify-between">
@@ -323,6 +322,22 @@ export default function PreNavigationScreen({
                   </h3>
                   
                   <div className="grid grid-cols-2 gap-3">
+                    <div className="flex items-center gap-2">
+                      <Car className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <div className="text-sm font-medium">Transport</div>
+                        <div className="text-xs text-muted-foreground">Driving</div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <Route className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <div className="text-sm font-medium">Segments</div>
+                        <div className="text-xs text-muted-foreground">{route.segments.length} turns</div>
+                      </div>
+                    </div>
+                    
                     {route.tolls && (
                       <div className="flex items-center gap-2">
                         <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -353,12 +368,21 @@ export default function PreNavigationScreen({
                   <div className="space-y-2">
                     <div className="text-sm font-medium">Route Highlights</div>
                     <div className="space-y-1">
-                      {route.segments.slice(0, 3).map((segment, index) => (
-                        <div key={index} className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <ChevronRight className="h-3 w-3" />
-                          {segment.road_name || segment.instructions}
+                      {route.segments && route.segments.length > 0 ? (
+                        route.segments.slice(0, 3).map((segment, index) => (
+                          <div key={index} className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <ChevronRight className="h-3 w-3" />
+                            <span className="line-clamp-1">
+                              {segment.road_name || segment.instructions || `Step ${index + 1}: ${formatDistance(segment.distance_m || 0)}`}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <MapPin className="h-3 w-3" />
+                          <span>Direct route from {origin.name} to {destination.name}</span>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -398,35 +422,49 @@ export default function PreNavigationScreen({
               <TabsContent value="steps" className="h-full p-0">
                 <ScrollArea className="h-full">
                   <div className="p-4 space-y-2">
-                    {route.segments.map((segment, index) => {
-                      const ManeuverIcon = getManeuverIcon(segment.maneuver);
-                      return (
-                        <Card key={index} className="p-3">
-                          <div className="flex items-start gap-3">
-                            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary">
-                              <ManeuverIcon className="h-4 w-4" />
-                            </div>
-                            <div className="flex-1 space-y-1">
-                              <div className="font-medium text-sm">{segment.instructions}</div>
-                              {segment.road_name && (
-                                <div className="text-xs text-muted-foreground">
-                                  on {segment.road_name}
-                                </div>
-                              )}
-                              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                <span>{formatDistance(segment.distance_m)}</span>
-                                <span>{formatDuration(segment.traffic_duration_s)}</span>
-                                {segment.traffic_info && segment.traffic_info.delay_minutes > 0 && (
-                                  <Badge variant="destructive" className="text-xs h-4">
-                                    +{segment.traffic_info.delay_minutes}min
-                                  </Badge>
+                    {route.segments && route.segments.length > 0 ? (
+                      route.segments.map((segment, index) => {
+                        const ManeuverIcon = getManeuverIcon(segment.maneuver);
+                        // Handle both OSRM format and our custom format
+                        const instruction = segment.instructions || segment.instruction || `Continue for ${formatDistance(segment.distance_m || segment.distance || 0)}`;
+                        const distance = segment.distance_m || segment.distance || 0;
+                        const duration = segment.traffic_duration_s || segment.duration_s || segment.duration || 0;
+                        
+                        return (
+                          <Card key={index} className="p-3">
+                            <div className="flex items-start gap-3">
+                              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary">
+                                <span className="text-xs font-bold">{index + 1}</span>
+                              </div>
+                              <div className="flex-1 space-y-1">
+                                <div className="font-medium text-sm">{instruction}</div>
+                                {segment.road_name && (
+                                  <div className="text-xs text-muted-foreground">
+                                    on {segment.road_name}
+                                  </div>
                                 )}
+                                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                  <span>{formatDistance(distance)}</span>
+                                  <span>{formatDuration(duration)}</span>
+                                  {segment.traffic_info && segment.traffic_info.delay_minutes > 0 && (
+                                    <Badge variant="destructive" className="text-xs h-4">
+                                      +{segment.traffic_info.delay_minutes}min
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </Card>
-                      );
-                    })}
+                          </Card>
+                        );
+                      })
+                    ) : (
+                      <div className="p-4 text-center">
+                        <div className="text-sm font-medium mb-2">Direct Route</div>
+                        <div className="text-xs text-muted-foreground">
+                          No detailed directions available. This is a direct route calculation.
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </ScrollArea>
               </TabsContent>
@@ -561,7 +599,6 @@ export default function PreNavigationScreen({
             </Button>
           </div>
         </Card>
-      </div>
     </div>
   );
 }
