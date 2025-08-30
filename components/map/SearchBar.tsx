@@ -185,6 +185,19 @@ export default function SearchBar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Handle navigation mode changes
+  useEffect(() => {
+    setIsNavigationMode(navigationMode);
+    if (navigationMode) {
+      setCurrentField('from');
+      setQuery('');
+    } else {
+      setFromLocation(null);
+      setToLocation(null);
+      setShowToField(false);
+    }
+  }, [navigationMode]);
+
 
   const searchLocation = useCallback(async (searchQuery: string) => {
     if (searchQuery.length < 1) {
@@ -386,21 +399,20 @@ export default function SearchBar({
 
     if (currentField === 'from') {
       setFromLocation(routePoint);
-      setQuery(routePoint.name);
-      setCurrentField('to');
-      // Clear and focus on the "to" field
+      // Switch to 'to' field and clear query for next input
       setTimeout(() => {
+        setCurrentField('to');
         setQuery('');
         inputRef.current?.focus();
       }, 100);
     } else {
       setToLocation(routePoint);
-      setQuery(routePoint.name);
       
       // Both locations selected, trigger route request
       if (fromLocation && onRouteRequest) {
         onRouteRequest(fromLocation, routePoint, selectedTransportMode);
       }
+      setQuery('');
     }
 
     setResults([]);
@@ -484,49 +496,84 @@ export default function SearchBar({
             className="absolute left-2 h-6 w-6 pointer-events-none"
           />
         )}
-        {isNavigationMode ? (
-          <div className="flex-1 space-y-2">
-            {/* From Field */}
-            <div className="relative">
-              <div className="absolute left-12 top-2 z-10 text-xs text-muted-foreground font-medium">From</div>
-              <Input
-                ref={currentField === 'from' ? inputRef : undefined}
-                type="text"
-                placeholder={currentField === 'from' ? "Enter starting location..." : (fromLocation?.name || "Starting location")}
-                value={currentField === 'from' ? query : (fromLocation?.name || '')}
-                onChange={currentField === 'from' ? handleInputChange : undefined}
-                onKeyDown={currentField === 'from' ? handleKeyDown : undefined}
-                onFocus={() => setCurrentField('from')}
-                className={`pl-12 pr-10 pt-5 pb-2 h-12 bg-background border-border shadow-sm transition-all ${
-                  currentField === 'from' ? 'border-blue-500 ring-1 ring-blue-500' : ''
-                }`}
-                autoComplete="off"
-                readOnly={currentField !== 'from'}
-              />
+        <div className={`flex-1 transition-all duration-500 ${isNavigationMode ? 'space-y-2' : ''}`}>
+          {/* Main Input Field that morphs */}
+          <div className="relative">
+            {isNavigationMode && (
+              <div className="absolute left-12 top-2 z-10 text-xs text-muted-foreground font-medium">
+                {currentField === 'from' ? 'From' : 'To'}
+              </div>
+            )}
+            <Input
+              ref={inputRef}
+              type="text"
+              placeholder={
+                isNavigationMode 
+                  ? (currentField === 'from' 
+                      ? "Enter starting location..." 
+                      : "Enter destination...")
+                  : "Search for a location..."
+              }
+              value={query}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              className={`pl-12 pr-10 bg-background border-border shadow-sm transition-all duration-500 ${
+                isNavigationMode 
+                  ? 'pt-5 pb-2 h-12' 
+                  : 'h-10'
+              } ${
+                isNavigationMode && currentField === 'from' ? 'border-green-500 ring-1 ring-green-500' :
+                isNavigationMode && currentField === 'to' ? 'border-red-500 ring-1 ring-red-500' :
+                'border-border'
+              }`}
+              autoComplete="off"
+            />
+          </div>
+          
+          {/* Show current selections in navigation mode */}
+          {isNavigationMode && (fromLocation || toLocation) && (
+            <div className="space-y-1 text-xs">
+              {fromLocation && (
+                <div className="flex items-center gap-2 px-2 py-1 bg-green-50 dark:bg-green-900/20 rounded">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span className="text-green-700 dark:text-green-300">{fromLocation.name}</span>
+                  {currentField !== 'from' && (
+                    <button 
+                      onClick={() => {
+                        setCurrentField('from');
+                        setQuery(fromLocation.name);
+                        inputRef.current?.focus();
+                      }}
+                      className="ml-auto text-green-600 hover:text-green-800"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+              )}
+              {toLocation && (
+                <div className="flex items-center gap-2 px-2 py-1 bg-red-50 dark:bg-red-900/20 rounded">
+                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                  <span className="text-red-700 dark:text-red-300">{toLocation.name}</span>
+                  {currentField !== 'to' && (
+                    <button 
+                      onClick={() => {
+                        setCurrentField('to');
+                        setQuery(toLocation.name);
+                        inputRef.current?.focus();
+                      }}
+                      className="ml-auto text-red-600 hover:text-red-800"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-            
-            {/* To Field - Animated Entry */}
-            <div className={`relative transform transition-all duration-300 ${
-              showToField ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-2 opacity-0 scale-95'
-            }`}>
-              <div className="absolute left-12 top-2 z-10 text-xs text-muted-foreground font-medium">To</div>
-              <Input
-                ref={currentField === 'to' ? inputRef : undefined}
-                type="text"
-                placeholder={currentField === 'to' ? "Enter destination..." : (toLocation?.name || "Destination")}
-                value={currentField === 'to' ? query : (toLocation?.name || '')}
-                onChange={currentField === 'to' ? handleInputChange : undefined}
-                onKeyDown={currentField === 'to' ? handleKeyDown : undefined}
-                onFocus={() => setCurrentField('to')}
-                className={`pl-12 pr-10 pt-5 pb-2 h-12 bg-background border-border shadow-sm transition-all ${
-                  currentField === 'to' ? 'border-blue-500 ring-1 ring-blue-500' : ''
-                }`}
-                autoComplete="off"
-                readOnly={currentField !== 'to'}
-              />
-            </div>
-            
-            {/* Transport Mode Selector */}
+          )}
+          
+          {/* Transport Mode Selector - Only show when in navigation mode */}
+          {isNavigationMode && (
             <div className="flex justify-center mt-3">
               <div className="flex gap-1 p-1 bg-muted rounded-lg">
                 {Object.entries(transportModes).map(([mode, config]) => {
@@ -535,7 +582,7 @@ export default function SearchBar({
                     <button
                       key={mode}
                       onClick={() => setSelectedTransportMode(mode as TransportMode)}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                      className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${
                         selectedTransportMode === mode
                           ? 'bg-white shadow-sm text-foreground'
                           : 'text-muted-foreground hover:text-foreground'
@@ -548,25 +595,27 @@ export default function SearchBar({
                 })}
               </div>
             </div>
-          </div>
-        ) : (
-          <Input
-            ref={inputRef}
-            type="text"
-            placeholder="Search for a location..."
-            value={query}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            className="pl-12 pr-10 h-10 bg-background border-border shadow-sm"
-            autoComplete="off"
-          />
-        )}
-        {query && (
+          )}
+        </div>
+        {/* Clear/Exit button */}
+        {(query || isNavigationMode) && (
           <Button
             size="icon"
             variant="ghost"
-            onClick={clearSearch}
+            onClick={() => {
+              if (isNavigationMode) {
+                // Exit navigation mode
+                setIsNavigationMode(false);
+                setFromLocation(null);
+                setToLocation(null);
+                setShowToField(false);
+                setCurrentField('from');
+                if (onNavigationModeChange) onNavigationModeChange(false);
+              }
+              clearSearch();
+            }}
             className="absolute right-1 h-8 w-8"
+            title={isNavigationMode ? "Exit navigation mode" : "Clear search"}
           >
             <X className="h-4 w-4" />
           </Button>

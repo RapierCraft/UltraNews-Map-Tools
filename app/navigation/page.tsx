@@ -70,15 +70,10 @@ export default function NavigationPage() {
       <BasicMap 
         navigationRoute={selectedRoute}
         showTrafficOverlay={true}
+        navigationMode={true}
+        onRouteRequest={handleRouteSelect}
+        onNavigationStart={handleNavigationStart}
       />
-
-      {/* Simplified Navigation Panel Overlay */}
-      <div className="absolute top-20 left-4 z-[1001]">
-        <SimpleNavigation 
-          onRouteSelect={handleRouteSelect}
-          onNavigationStart={handleNavigationStart}
-        />
-      </div>
     </div>
   );
 }

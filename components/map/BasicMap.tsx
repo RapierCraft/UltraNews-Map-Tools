@@ -52,9 +52,18 @@ interface NavigationRoute {
 interface BasicMapProps {
   navigationRoute?: NavigationRoute | null;
   showTrafficOverlay?: boolean;
+  navigationMode?: boolean;
+  onRouteRequest?: (route: NavigationRoute) => void;
+  onNavigationStart?: (origin: any, destination: any) => void;
 }
 
-export default function BasicMap({ navigationRoute, showTrafficOverlay }: BasicMapProps = {}) {
+export default function BasicMap({ 
+  navigationRoute, 
+  showTrafficOverlay, 
+  navigationMode = false,
+  onRouteRequest,
+  onNavigationStart 
+}: BasicMapProps = {}) {
   const [center, setCenter] = useState<[number, number]>([40.7128, -74.0060]); // NYC default
   const [zoom, setZoom] = useState(12);
   const [markers, setMarkers] = useState<Marker[]>([]);
@@ -377,12 +386,33 @@ export default function BasicMap({ navigationRoute, showTrafficOverlay }: BasicM
         <div className="flex-1 max-w-md">
           <SearchBar 
             onLocationSelect={handleLocationSelect}
-            onRouteRequest={(origin, destination, mode) => {
-              // Convert to NavigationRoute format and trigger route calculation
-              console.log('Route requested:', { origin, destination, mode });
-              // This would trigger the SimpleNavigation component
+            onRouteRequest={async (origin, destination, mode) => {
+              // Calculate route using the backend API
+              try {
+                const response = await fetch('http://localhost:8001/api/v1/routing/calculate', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    origin,
+                    destination,
+                    profile: mode === 'driving' ? 'driving-traffic' : mode,
+                    include_alternatives: false
+                  })
+                });
+
+                if (response.ok) {
+                  const data = await response.json();
+                  const route = data.primary_route;
+                  if (onRouteRequest) {
+                    onRouteRequest(route);
+                  }
+                }
+              } catch (error) {
+                console.error('Route calculation failed:', error);
+              }
             }}
             showModeSelector={true}
+            navigationMode={navigationMode}
           />
         </div>
 

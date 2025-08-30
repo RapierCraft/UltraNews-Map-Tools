@@ -816,8 +816,23 @@ export default function CesiumGlobe({
     return null; // Let the dynamic import loading screen handle this
   }
 
+  // Apply CSS filters based on current layer for better contrast
+  const getMapStyle = () => {
+    const baseStyle = { ...style };
+    
+    if (currentLayer === 'osm-dark') {
+      // Use invert filter on high-quality OSM tiles for perfect dark mode
+      baseStyle.filter = 'invert(1) hue-rotate(180deg) brightness(0.9) contrast(1.1)';
+    } else if (currentLayer === 'osm-standard') {
+      // Clean standard mode
+      baseStyle.filter = 'contrast(1.05) saturate(1.05)';
+    }
+    
+    return baseStyle;
+  };
+
   return (
-    <div className={`relative w-full h-full ${className}`} style={style}>
+    <div className={`relative w-full h-full ${className}`} style={getMapStyle()}>
       <div 
         ref={containerRef}
         className="w-full h-full"

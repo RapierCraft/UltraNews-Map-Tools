@@ -419,21 +419,12 @@ export default function SimpleVectorGlobe({
         
         switch(currentLayer) {
           case 'osm-standard':
+          case 'osm-dark':
+            // Use high-quality CartoDB vector tiles for both modes (invert applied via CSS)
             imageryProvider = new window.Cesium.UrlTemplateImageryProvider({
               url: dataLayers?.labels 
                 ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
                 : 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png',
-              credit: '© OpenStreetMap contributors | CartoDB',
-              subdomains: ['a', 'b', 'c', 'd'],
-              maximumLevel: 18
-            });
-            break;
-            
-          case 'osm-dark':
-            imageryProvider = new window.Cesium.UrlTemplateImageryProvider({
-              url: dataLayers?.labels 
-                ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
-                : 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
               credit: '© OpenStreetMap contributors | CartoDB',
               subdomains: ['a', 'b', 'c', 'd'],
               maximumLevel: 18
@@ -880,5 +871,20 @@ export default function SimpleVectorGlobe({
     );
   }
 
-  return <div ref={containerRef} className={`w-full h-full ${className}`} style={style} />;
+  // Apply CSS filters based on current layer for better contrast
+  const getMapStyle = () => {
+    const baseStyle = { ...style };
+    
+    if (currentLayer === 'osm-dark') {
+      // Use invert filter on high-quality OSM tiles for perfect dark mode
+      baseStyle.filter = 'invert(1) hue-rotate(180deg) brightness(0.9) contrast(1.1)';
+    } else if (currentLayer === 'osm-standard') {
+      // Clean standard mode
+      baseStyle.filter = 'contrast(1.05) saturate(1.05)';
+    }
+    
+    return baseStyle;
+  };
+
+  return <div ref={containerRef} className={`w-full h-full ${className}`} style={getMapStyle()} />;
 }
