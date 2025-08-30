@@ -19,6 +19,13 @@ import LocationInfoModal from './LocationInfoModal';
 import FullArticleModal from './FullArticleModal';
 import { Card } from '@/components/ui/card';
 import { MapPin, Navigation, Globe, Map } from 'lucide-react';
+import { 
+  processOSRMSteps, 
+  generateRouteHighlights, 
+  estimateTolls, 
+  estimateFuelConsumption,
+  type ProcessedRouteStep 
+} from '@/lib/routeInstructionProcessor';
 
 interface Marker {
   id: string;
@@ -40,13 +47,22 @@ interface BorderSettings {
 
 interface NavigationRoute {
   total_distance_m: number;
+  total_duration_s: number;
   total_traffic_duration_s: number;
-  segments: Array<{
-    instructions: string;
-    distance_m: number;
-    traffic_duration_s: number;
-  }>;
+  segments: ProcessedRouteStep[];
   overview_geometry: number[][];
+  traffic_delay_s: number;
+  confidence: number;
+  route_highlights?: string[];
+  tolls?: {
+    amount: number;
+    currency: string;
+    locations: number;
+  };
+  fuel_consumption?: {
+    liters: number;
+    cost_estimate: number;
+  };
 }
 
 interface BasicMapProps {
@@ -404,14 +420,24 @@ export default function BasicMap({
                   
                   if (osrmData.routes && osrmData.routes.length > 0) {
                     const osrmRoute = osrmData.routes[0];
+                    
+                    // Process OSRM steps into Google Maps-style instructions
+                    const processedSteps = processOSRMSteps(osrmRoute.legs[0]?.steps || []);
+                    const routeHighlights = generateRouteHighlights(processedSteps);
+                    const tolls = estimateTolls(processedSteps);
+                    const fuelConsumption = estimateFuelConsumption(osrmRoute.distance);
+                    
                     const route = {
                       total_distance_m: osrmRoute.distance,
                       total_duration_s: osrmRoute.duration,
                       total_traffic_duration_s: osrmRoute.duration,
-                      segments: osrmRoute.legs[0]?.steps || [],
+                      segments: processedSteps,
                       overview_geometry: osrmRoute.geometry.coordinates,
                       traffic_delay_s: 0,
-                      confidence: 0.9
+                      confidence: 0.9,
+                      route_highlights: routeHighlights,
+                      tolls,
+                      fuel_consumption: fuelConsumption
                     };
                     
                     console.log('Processed route with geometry:', route.overview_geometry.length, 'points');

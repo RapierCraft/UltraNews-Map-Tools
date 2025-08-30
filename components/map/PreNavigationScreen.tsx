@@ -368,13 +368,18 @@ export default function PreNavigationScreen({
                   <div className="space-y-2">
                     <div className="text-sm font-medium">Route Highlights</div>
                     <div className="space-y-1">
-                      {route.segments && route.segments.length > 0 ? (
+                      {route.route_highlights && route.route_highlights.length > 0 ? (
+                        route.route_highlights.map((highlight, index) => (
+                          <div key={index} className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <ChevronRight className="h-3 w-3" />
+                            <span className="line-clamp-1">{highlight}</span>
+                          </div>
+                        ))
+                      ) : route.segments && route.segments.length > 0 ? (
                         route.segments.slice(0, 3).map((segment, index) => (
                           <div key={index} className="flex items-center gap-2 text-xs text-muted-foreground">
                             <ChevronRight className="h-3 w-3" />
-                            <span className="line-clamp-1">
-                              {segment.road_name || segment.instructions || `Step ${index + 1}: ${formatDistance(segment.distance_m || 0)}`}
-                            </span>
+                            <span className="line-clamp-1">{segment.instructions}</span>
                           </div>
                         ))
                       ) : (
