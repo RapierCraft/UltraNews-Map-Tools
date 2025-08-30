@@ -27,6 +27,8 @@ import {
   estimateFuelConsumption,
   type ProcessedRouteStep 
 } from '@/lib/routeInstructionProcessor';
+import { useTransitData } from './TransitLayer';
+import type { BoundingBox } from '@/lib/transitService';
 
 interface Marker {
   id: string;
@@ -126,6 +128,21 @@ export default function BasicMap({
   const [modalSourcePosition, setModalSourcePosition] = useState<{ x: number; y: number } | null>(null);
   const [showFullArticle, setShowFullArticle] = useState(false);
   const [manualLayerSelection, setManualLayerSelection] = useState(false);
+  const [transitSettings, setTransitSettings] = useState(defaultTransitSettings);
+
+  // Calculate map bounds for transit data
+  const mapBounds: BoundingBox | undefined = center ? {
+    minLat: center[0] - 0.01 * Math.pow(2, 18 - zoom),
+    maxLat: center[0] + 0.01 * Math.pow(2, 18 - zoom), 
+    minLon: center[1] - 0.01 * Math.pow(2, 18 - zoom),
+    maxLon: center[1] + 0.01 * Math.pow(2, 18 - zoom)
+  } : undefined;
+
+  // Load transit data when enabled
+  const { stops, routes, stopsGeoJSON, routesGeoJSON, loading: transitLoading } = useTransitData(
+    transitSettings.enabled ? mapBounds : undefined, 
+    zoom
+  );
 
   // Handle theme change
   const handleThemeChange = useCallback((isDark: boolean) => {
@@ -533,6 +550,15 @@ export default function BasicMap({
         mapHeading={mapHeading}
       />
 
+      {/* Transit Controls */}
+      {!hideControls && (
+        <TransitControls
+          settings={transitSettings}
+          onSettingsChange={setTransitSettings}
+          className="absolute top-24 right-4 z-[1000] w-48"
+        />
+      )}
+
       {/* Vector-Enhanced Cesium Globe */}
       <VectorCesiumWrapper
         center={center}
@@ -551,6 +577,9 @@ export default function BasicMap({
         onHeadingChange={setMapHeading}
         navigationRoute={calculatedRoute}
         showTrafficOverlay={showTrafficOverlay}
+        transitSettings={transitSettings}
+        transitStops={transitSettings.enabled ? stopsGeoJSON : null}
+        transitRoutes={transitSettings.enabled ? routesGeoJSON : null}
       />
 
       {/* Advanced Location Information Modal */}

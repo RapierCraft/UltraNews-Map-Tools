@@ -14,6 +14,7 @@ import {
 import { NavigationService, NavigationState } from '@/lib/navigationService';
 import { ProcessedRouteStep } from '@/lib/routeInstructionProcessor';
 import { formatDistance, formatDuration } from '@/lib/routeInstructionProcessor';
+import MobileNavigationOverlay from './MobileNavigationOverlay';
 
 interface LiveNavigationModalProps {
   route: {
@@ -42,6 +43,19 @@ export default function LiveNavigationModal({
   const [gpsStatus, setGpsStatus] = useState<'searching' | 'good' | 'poor' | 'lost'>('searching');
   const navigationServiceRef = useRef<NavigationService | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768); // Mobile breakpoint
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     // Initialize navigation service
@@ -134,6 +148,20 @@ export default function LiveNavigationModal({
 
   const CurrentManeuverIcon = currentStep ? getManeuverIcon(currentStep.maneuver?.type) : Navigation2;
 
+  // Use mobile layout for small screens
+  if (isMobile) {
+    return (
+      <MobileNavigationOverlay
+        route={route}
+        origin={origin}
+        destination={destination}
+        onEndNavigation={onEndNavigation}
+        onRecalculate={onRecalculate}
+      />
+    );
+  }
+
+  // Desktop layout for larger screens
   return (
     <div className={`fixed right-16 top-4 z-50 transition-all duration-300 ${
       isExpanded ? 'w-[460px] bottom-4' : 'w-[460px]'
