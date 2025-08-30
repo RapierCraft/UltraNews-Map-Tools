@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Navigation, Clock, MapPin, Route, Zap, TrendingUp } from 'lucide-react';
 import SimpleNavigation from '@/components/map/SimpleNavigation';
+import PreNavigationScreen from '@/components/map/PreNavigationScreen';
 
 // Dynamic import for map to avoid SSR issues  
 const BasicMap = dynamic(() => import('@/components/map/BasicMap'), {
@@ -19,26 +20,77 @@ const BasicMap = dynamic(() => import('@/components/map/BasicMap'), {
   )
 });
 
+interface RouteStep {
+  instructions: string;
+  distance_m: number;
+  duration_s: number;
+  traffic_duration_s: number;
+  maneuver?: {
+    type: string;
+    modifier?: string;
+  };
+  traffic_info?: {
+    condition: string;
+    delay_minutes: number;
+    speed_kmh: number;
+  };
+  warnings?: string[];
+  road_name?: string;
+}
+
 interface NavigationRoute {
   total_distance_m: number;
   total_duration_s: number;
   total_traffic_duration_s: number;
-  segments: any[];
+  segments: RouteStep[];
   overview_geometry: number[][];
   traffic_delay_s: number;
   confidence: number;
+  warnings?: any[];
+  tolls?: {
+    amount: number;
+    currency: string;
+    locations: number;
+  };
+  fuel_consumption?: {
+    liters: number;
+    cost_estimate: number;
+  };
+  alternatives?: NavigationRoute[];
+}
+
+interface RoutePoint {
+  lat: number;
+  lon: number;
+  name?: string;
 }
 
 export default function NavigationPage() {
   const [selectedRoute, setSelectedRoute] = useState<NavigationRoute | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [showPreNavigation, setShowPreNavigation] = useState(false);
+  const [origin, setOrigin] = useState<RoutePoint | null>(null);
+  const [destination, setDestination] = useState<RoutePoint | null>(null);
 
-  const handleRouteSelect = useCallback((route: NavigationRoute) => {
+  const handleRouteSelect = useCallback((route: NavigationRoute, routeOrigin?: RoutePoint, routeDestination?: RoutePoint) => {
     setSelectedRoute(route);
+    if (routeOrigin) setOrigin(routeOrigin);
+    if (routeDestination) setDestination(routeDestination);
+    setShowPreNavigation(true);
   }, []);
 
-  const handleNavigationStart = useCallback((origin: any, destination: any) => {
+  const handleNavigationStart = useCallback(() => {
+    setShowPreNavigation(false);
     setIsNavigating(true);
+  }, []);
+
+  const handleNavigationCancel = useCallback(() => {
+    setShowPreNavigation(false);
+    setSelectedRoute(null);
+  }, []);
+
+  const handleAlternativeSelect = useCallback((route: NavigationRoute) => {
+    setSelectedRoute(route);
   }, []);
 
   const formatDuration = (seconds: number) => {
@@ -70,10 +122,22 @@ export default function NavigationPage() {
       <BasicMap 
         navigationRoute={selectedRoute}
         showTrafficOverlay={true}
-        navigationMode={true}
+        navigationMode={isNavigating}
         onRouteRequest={handleRouteSelect}
         onNavigationStart={handleNavigationStart}
       />
+
+      {/* Pre-Navigation Screen */}
+      {showPreNavigation && selectedRoute && origin && destination && (
+        <PreNavigationScreen
+          route={selectedRoute}
+          origin={origin}
+          destination={destination}
+          onStartNavigation={handleNavigationStart}
+          onCancel={handleNavigationCancel}
+          onSelectAlternative={handleAlternativeSelect}
+        />
+      )}
     </div>
   );
 }

@@ -431,6 +431,17 @@ export default function SimpleVectorGlobe({
             });
             break;
             
+          case 'voyager':
+            imageryProvider = new window.Cesium.UrlTemplateImageryProvider({
+              url: dataLayers?.labels 
+                ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'
+                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png',
+              credit: '© OpenStreetMap contributors | CartoDB',
+              subdomains: ['a', 'b', 'c', 'd'],
+              maximumLevel: 18
+            });
+            break;
+            
           case 'esri-worldimagery':
             imageryProvider = new window.Cesium.UrlTemplateImageryProvider({
               url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -471,6 +482,13 @@ export default function SimpleVectorGlobe({
         // Set initial view
         const cartesian = window.Cesium.Cartesian3.fromDegrees(center[1], center[0], 15000000);
         viewer.camera.setView({ destination: cartesian });
+
+        // Set zoom constraints to prevent infinite zoom out
+        viewer.scene.screenSpaceCameraController.minimumZoomDistance = 1000; // Minimum zoom distance (1km above ground)
+        viewer.scene.screenSpaceCameraController.maximumZoomDistance = 50000000; // Maximum zoom out (50,000km from earth surface)
+        
+        // Enable collision detection to prevent going below terrain
+        viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
 
         // Add camera movement listener to track zoom, heading, and show/hide buildings
         const updateCameraState = async () => {
@@ -881,6 +899,9 @@ export default function SimpleVectorGlobe({
     } else if (currentLayer === 'osm-standard') {
       // Enhanced light mode - inverse of dark mode adjustments
       baseStyle.filter = 'brightness(0.85) contrast(1.3) saturate(1.2)';
+    } else if (currentLayer === 'voyager') {
+      // Clean voyager style with slight enhancement
+      baseStyle.filter = 'contrast(1.1) saturate(1.1)';
     }
     
     return baseStyle;

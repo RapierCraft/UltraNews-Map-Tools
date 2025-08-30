@@ -56,6 +56,7 @@ interface MapControlsProps {
 const mapStyles = [
   { id: 'osm-standard', name: 'Light', icon: Sun },
   { id: 'osm-dark', name: 'Dark', icon: Moon },
+  { id: 'voyager', name: 'Voyager', icon: Map },
   { id: 'esri-worldimagery', name: 'Satellite', icon: Satellite },
 ];
 

@@ -68,6 +68,7 @@ export default function BasicMap({
   const [zoom, setZoom] = useState(12);
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [currentLayer, setCurrentLayer] = useState('osm-standard');
+  const [calculatedRoute, setCalculatedRoute] = useState<NavigationRoute | null>(navigationRoute || null);
   const [useVectorTiles, setUseVectorTiles] = useState(true);
   const [mapHeading, setMapHeading] = useState(0);
   const cesiumViewerRef = useRef<unknown>(null);
@@ -388,27 +389,90 @@ export default function BasicMap({
             onLocationSelect={handleLocationSelect}
             onRouteRequest={async (origin, destination, mode) => {
               // Calculate route using the backend API
+              console.log('Route calculation requested:', { origin, destination, mode });
               try {
+                // Try public OSRM API first
+                const osrmMode = mode === 'driving' ? 'car' : mode === 'cycling' ? 'bike' : 'foot';
+                const osrmUrl = `https://router.project-osrm.org/route/v1/${osrmMode}/${origin.lon},${origin.lat};${destination.lon},${destination.lat}?overview=full&geometries=geojson&steps=true`;
+                
+                console.log('Fetching route from OSRM:', osrmUrl);
+                const osrmResponse = await fetch(osrmUrl);
+                
+                if (osrmResponse.ok) {
+                  const osrmData = await osrmResponse.json();
+                  console.log('OSRM response:', osrmData);
+                  
+                  if (osrmData.routes && osrmData.routes.length > 0) {
+                    const osrmRoute = osrmData.routes[0];
+                    const route = {
+                      total_distance_m: osrmRoute.distance,
+                      total_duration_s: osrmRoute.duration,
+                      total_traffic_duration_s: osrmRoute.duration,
+                      segments: osrmRoute.legs[0]?.steps || [],
+                      overview_geometry: osrmRoute.geometry.coordinates,
+                      traffic_delay_s: 0,
+                      confidence: 0.9
+                    };
+                    
+                    console.log('Processed route with geometry:', route.overview_geometry.length, 'points');
+                    setCalculatedRoute(route);
+                    
+                    if (onRouteRequest) {
+                      onRouteRequest(route);
+                    }
+                    return;
+                  }
+                }
+                
+                // Fallback to backend API
+                const requestBody = {
+                  origin,
+                  destination,
+                  profile: mode === 'driving' ? 'driving-traffic' : mode,
+                  include_alternatives: false
+                };
+                console.log('Falling back to backend API:', requestBody);
                 const response = await fetch('http://localhost:8001/api/v1/routing/calculate', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    origin,
-                    destination,
-                    profile: mode === 'driving' ? 'driving-traffic' : mode,
-                    include_alternatives: false
-                  })
+                  body: JSON.stringify(requestBody)
                 });
 
                 if (response.ok) {
                   const data = await response.json();
+                  console.log('Backend API response:', data);
                   const route = data.primary_route;
+                  
+                  // If still no geometry, create straight line
+                  if (!route.overview_geometry || route.overview_geometry.length === 0) {
+                    console.log('Creating fallback straight line');
+                    route.overview_geometry = [
+                      [origin.lon, origin.lat],
+                      [destination.lon, destination.lat]
+                    ];
+                  }
+                  
+                  setCalculatedRoute(route);
                   if (onRouteRequest) {
                     onRouteRequest(route);
                   }
                 }
               } catch (error) {
                 console.error('Route calculation failed:', error);
+                // Last resort - straight line
+                const fallbackRoute = {
+                  total_distance_m: 0,
+                  total_duration_s: 0,
+                  total_traffic_duration_s: 0,
+                  segments: [],
+                  overview_geometry: [
+                    [origin.lon, origin.lat],
+                    [destination.lon, destination.lat]
+                  ],
+                  traffic_delay_s: 0,
+                  confidence: 0.1
+                };
+                setCalculatedRoute(fallbackRoute);
               }
             }}
             showModeSelector={true}
@@ -452,7 +516,7 @@ export default function BasicMap({
         dataLayers={dataLayers}
         onViewerReady={(viewer) => { cesiumViewerRef.current = viewer; }}
         onHeadingChange={setMapHeading}
-        navigationRoute={navigationRoute}
+        navigationRoute={calculatedRoute}
         showTrafficOverlay={showTrafficOverlay}
       />
 

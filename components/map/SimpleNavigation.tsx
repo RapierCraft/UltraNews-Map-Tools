@@ -23,7 +23,7 @@ interface NavigationRoute {
 }
 
 interface SimpleNavigationProps {
-  onRouteSelect?: (route: NavigationRoute) => void;
+  onRouteSelect?: (route: NavigationRoute, origin?: RoutePoint, destination?: RoutePoint) => void;
   onNavigationStart?: (origin: RoutePoint, destination: RoutePoint) => void;
 }
 
@@ -56,7 +56,7 @@ export default function SimpleNavigation({ onRouteSelect, onNavigationStart }: S
         setRoute(calculatedRoute);
         
         if (onRouteSelect) {
-          onRouteSelect(calculatedRoute);
+          onRouteSelect(calculatedRoute, origin, destination);
         }
       }
     } catch (error) {
