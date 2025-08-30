@@ -127,6 +127,16 @@ export default function NavigationPage() {
         onNavigationStart={handleNavigationStart}
       />
 
+      {/* Navigation Input Panel - only show when not navigating */}
+      {!isNavigating && !showPreNavigation && (
+        <div className="absolute top-4 left-4 z-[1000]">
+          <SimpleNavigation 
+            onRouteSelect={handleRouteSelect}
+            onNavigationStart={handleNavigationStart}
+          />
+        </div>
+      )}
+
       {/* Pre-Navigation Screen */}
       {showPreNavigation && selectedRoute && origin && destination && (
         <PreNavigationScreen
