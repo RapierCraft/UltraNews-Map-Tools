@@ -60,7 +60,7 @@ export class TrafficService {
   private async fetchTrafficUpdates() {
     for (const [routeId, route] of this.currentRoutes) {
       try {
-        const response = await fetch(`http://localhost:8001/api/v1/routing/traffic?lat=${route.overview_geometry[0][1]}&lon=${route.overview_geometry[0][0]}&radius_km=5`);
+        const response = await fetch(`http://localhost:8002/api/v1/routing/traffic?lat=${route.overview_geometry[0][1]}&lon=${route.overview_geometry[0][0]}&radius_km=5`);
         
         if (response.ok) {
           const trafficData = await response.json();
@@ -89,7 +89,7 @@ export class TrafficService {
 
   async getInstantTrafficInfo(lat: number, lon: number, radiusKm: number = 1): Promise<any> {
     try {
-      const response = await fetch(`http://localhost:8001/api/v1/routing/traffic?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`);
+      const response = await fetch(`http://localhost:8002/api/v1/routing/traffic?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`);
       
       if (response.ok) {
         return await response.json();
@@ -114,7 +114,7 @@ export class TrafficService {
         params.append('departure_time', departureTime);
       }
       
-      const response = await fetch(`http://localhost:8001/api/v1/routing/eta?${params}`);
+      const response = await fetch(`http://localhost:8002/api/v1/routing/eta?${params}`);
       
       if (response.ok) {
         return await response.json();

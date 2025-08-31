@@ -396,7 +396,7 @@ export default function InfiniteVectorMap({
         sources: {
           'base-tiles': {
             type: 'raster',
-            tiles: ['http://localhost:8001/api/v1/tiles/osm/{z}/{x}/{y}.png'],
+            tiles: ['http://localhost:8002/api/v1/tiles/osm/{z}/{x}/{y}.png'],
             tileSize: 256,
             maxzoom: 18
           }

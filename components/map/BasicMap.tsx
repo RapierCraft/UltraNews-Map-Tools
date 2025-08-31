@@ -92,7 +92,7 @@ export default function BasicMap({
   const cesiumViewerRef = useRef<unknown>(null);
   const [dataLayers, setDataLayers] = useState({
     roads: true,
-    buildings: false,
+    buildings: true,
     waterways: true,
     parks: true,
     labels: true,

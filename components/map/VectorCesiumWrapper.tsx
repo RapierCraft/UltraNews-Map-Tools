@@ -68,6 +68,12 @@ interface VectorCesiumWrapperProps {
   onHeadingChange?: (heading: number) => void;
   navigationRoute?: NavigationRoute | null;
   showTrafficOverlay?: boolean;
+  highlightedRoad?: {
+    osm_id: number;
+    osm_type: string;
+    name: string;
+    tags: any;
+  } | null;
 }
 
 export default function VectorCesiumWrapper(props: VectorCesiumWrapperProps) {

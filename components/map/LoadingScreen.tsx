@@ -25,16 +25,16 @@ export default function LoadingScreen() {
         // Preload essential tiles that are always needed
         const tilesToPreload = [
           // World tiles
-          'http://localhost:8001/api/v1/tiles/osm/0/0/0.png',
-          'http://localhost:8001/api/v1/tiles/osm/1/0/0.png',
-          'http://localhost:8001/api/v1/tiles/osm/1/1/0.png',
-          'http://localhost:8001/api/v1/tiles/osm/1/0/1.png',
-          'http://localhost:8001/api/v1/tiles/osm/1/1/1.png',
+          'http://localhost:8002/api/v1/tiles/osm/0/0/0.png',
+          'http://localhost:8002/api/v1/tiles/osm/1/0/0.png',
+          'http://localhost:8002/api/v1/tiles/osm/1/1/0.png',
+          'http://localhost:8002/api/v1/tiles/osm/1/0/1.png',
+          'http://localhost:8002/api/v1/tiles/osm/1/1/1.png',
           // Major regions
-          'http://localhost:8001/api/v1/tiles/osm/3/2/2.png',
-          'http://localhost:8001/api/v1/tiles/osm/3/3/2.png',
-          'http://localhost:8001/api/v1/tiles/osm/3/2/3.png',
-          'http://localhost:8001/api/v1/tiles/osm/3/3/3.png'
+          'http://localhost:8002/api/v1/tiles/osm/3/2/2.png',
+          'http://localhost:8002/api/v1/tiles/osm/3/3/2.png',
+          'http://localhost:8002/api/v1/tiles/osm/3/2/3.png',
+          'http://localhost:8002/api/v1/tiles/osm/3/3/3.png'
         ];
 
         setLoadingStatus('Caching map data...');

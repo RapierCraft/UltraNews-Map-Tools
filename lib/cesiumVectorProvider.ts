@@ -108,7 +108,7 @@ export class CesiumVectorTileProvider {
 
     try {
       // Fetch vector tile data from hybrid backend
-      const tileUrl = `http://localhost:8001/api/v1/tiles/vector-hybrid/${z}/${x}/${y}.mvt`;
+      const tileUrl = `http://localhost:8002/api/v1/tiles/vector-hybrid/${z}/${x}/${y}.mvt`;
 
       const vectorTile = await load(tileUrl, MVTLoader);
       

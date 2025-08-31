@@ -242,26 +242,6 @@ export default function LocationInfoModal({ location, onClose, onExpand }: Locat
               </div>
             )}
 
-            {/* POI Information */}
-            {location.tags && Object.keys(location.tags).length > 0 && (
-              <div className="space-y-2 mb-4">
-                <h4 className={`font-semibold text-sm ${textColor}`}>POI Information</h4>
-                <div className="grid gap-2">
-                  {Object.entries(location.tags)
-                    .filter(([key, value]) => key !== 'name' && value && value.trim() !== '')
-                    .slice(0, 6)
-                    .map(([key, value]) => (
-                      <div key={key} className={`text-xs p-2 rounded ${isDark ? 'bg-gray-800/60' : 'bg-white/80'} border ${isDark ? 'border-gray-700/40' : 'border-gray-200/60'}`}>
-                        <span className={`font-medium ${subtextColor} uppercase`}>
-                          {key.replace(/_/g, ' ')}:
-                        </span>
-                        <span className={`ml-2 ${textColor}`}>{value}</span>
-                      </div>
-                    ))}
-                </div>
-                <Separator />
-              </div>
-            )}
             
             {/* Enhanced Content */}
             {isLoadingWiki ? (

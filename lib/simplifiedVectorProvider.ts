@@ -21,8 +21,8 @@ export class SimplifiedVectorProvider {
     // Create a provider that serves vector-style rendered tiles
     // Using the hybrid endpoint which converts vector to styled images
     const baseUrl = this.isDarkTheme
-      ? 'http://localhost:8001/api/v1/tiles/vector-styled-dark/{z}/{x}/{y}.png'
-      : 'http://localhost:8001/api/v1/tiles/vector-styled-light/{z}/{x}/{y}.png';
+      ? 'http://localhost:8002/api/v1/tiles/vector-styled-dark/{z}/{x}/{y}.png'
+      : 'http://localhost:8002/api/v1/tiles/vector-styled-light/{z}/{x}/{y}.png';
 
     return new window.Cesium.UrlTemplateImageryProvider({
       url: baseUrl,

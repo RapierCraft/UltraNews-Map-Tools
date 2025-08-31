@@ -5,7 +5,6 @@ import { X, MapPin, Navigation, Search, Route, Globe, Car, Bus, Train, Bike, Use
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
@@ -154,6 +153,7 @@ export default function SearchBar({
   navigationMode = false,
   onNavigationModeChange
 }: SearchBarProps) {
+  const [mounted, setMounted] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -168,18 +168,34 @@ export default function SearchBar({
   const router = useRouter();
 
   // Navigation mode state
-  const [isNavigationMode, setIsNavigationMode] = useState(navigationMode);
+  const [isNavigationMode, setIsNavigationMode] = useState(false);
   const [fromLocation, setFromLocation] = useState<RoutePoint | null>(null);
   const [toLocation, setToLocation] = useState<RoutePoint | null>(null);
   const [selectedTransportMode, setSelectedTransportMode] = useState<TransportMode>('driving');
   const [showToField, setShowToField] = useState(false);
   const [currentField, setCurrentField] = useState<'from' | 'to'>('from');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close results when clicking outside
+  // Mount effect
+  useEffect(() => {
+    setMounted(true);
+    setIsNavigationMode(navigationMode);
+  }, [navigationMode]);
+
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (resultsRef.current && !resultsRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      
+      // Close search results if clicking outside
+      if (resultsRef.current && !resultsRef.current.contains(target)) {
         setShowResults(false);
+      }
+      
+      // Close dropdown menu if clicking outside
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
+        setShowDropdown(false);
       }
     };
 
@@ -438,69 +454,66 @@ export default function SearchBar({
     setSelectedIndex(-1);
   };
 
+  if (!mounted) {
+    return null;
+  }
+
   return (
     <div className={`relative ${className}`} ref={resultsRef}>
       <div className="relative">
         {/* Logo/Dropdown positioned within the input container */}
         {showModeSelector ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`absolute left-1 z-10 hover:bg-accent transition-all duration-500 ${
-                  isNavigationMode ? 'top-3 h-6 w-6' : 'top-1 h-8 w-8'
-                }`}
-              >
-                <Image
-                  src="/logo.png"
-                  alt="UltraMaps"
-                  width={isNavigationMode ? 16 : 20}
-                  height={isNavigationMode ? 16 : 20}
-                  className={isNavigationMode ? "h-4 w-4" : "h-5 w-5"}
-                />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuItem 
-                onClick={() => router.push('/')}
-                className="cursor-pointer"
-              >
-                <Globe className="mr-2 h-4 w-4" />
-                <span>Map View</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => {
-                  setIsNavigationMode(true);
-                  setShowToField(true);
-                  if (onNavigationModeChange) onNavigationModeChange(true);
-                }}
-                className="cursor-pointer"
-              >
-                <Navigation className="mr-2 h-4 w-4" />
-                <span>Navigation</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => {
-                  inputRef.current?.focus();
-                }}
-                className="cursor-pointer"
-              >
-                <Search className="mr-2 h-4 w-4" />
-                <span>Search Locations</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => {
-                  // Future: Add route planning mode
-                  router.push('/navigation');
-                }}
-                className="cursor-pointer"
-              >
-                <Route className="mr-2 h-4 w-4" />
-                <span>Route Planning</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDropdown(!showDropdown);
+              }}
+              className={`absolute left-1 z-10 hover:bg-accent transition-all duration-500 flex items-center justify-center rounded-md border border-transparent ${
+                isNavigationMode ? 'top-2 h-8 w-8' : 'top-1 h-8 w-8'
+              }`}
+              type="button"
+            >
+              <Image
+                src="/logo.png"
+                alt="UltraMaps"
+                width={isNavigationMode ? 16 : 20}
+                height={isNavigationMode ? 16 : 20}
+                className={isNavigationMode ? "h-4 w-4" : "h-5 w-5"}
+              />
+            </button>
+            
+            {showDropdown && (
+              <Card className="absolute top-10 left-0 w-56 shadow-lg z-[1002] bg-background border">
+                <div className="py-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push('/');
+                      setShowDropdown(false);
+                    }}
+                    className="w-full px-3 py-2 text-left flex items-center hover:bg-accent cursor-pointer"
+                  >
+                    <Globe className="mr-2 h-4 w-4" />
+                    <span>Map View</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsNavigationMode(true);
+                      setShowToField(true);
+                      if (onNavigationModeChange) onNavigationModeChange(true);
+                      setShowDropdown(false);
+                    }}
+                    className="w-full px-3 py-2 text-left flex items-center hover:bg-accent cursor-pointer"
+                  >
+                    <Navigation className="mr-2 h-4 w-4" />
+                    <span>Navigation</span>
+                  </button>
+                </div>
+              </Card>
+            )}
+          </div>
         ) : (
           <Image
             src="/logo.png"

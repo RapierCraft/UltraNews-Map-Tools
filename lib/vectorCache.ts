@@ -365,7 +365,7 @@ class VectorTileCache {
   }
 
   private buildTileUrl(provider: string, z: number, x: number, y: number, type: 'tile' | 'building' = 'tile'): string {
-    const tileServerBase = `http://localhost:8001/api/v1`;
+    const tileServerBase = `http://localhost:8002/api/v1`;
     if (type === 'building') {
       return `${tileServerBase}/buildings/${provider}/${z}/${x}/${y}.json`;
     }

@@ -217,7 +217,7 @@ export default function CesiumGlobe({
       
       // Optimized OSM provider with aggressive caching
       const osmProvider = new window.Cesium.UrlTemplateImageryProvider({
-        url: 'http://localhost:8001/api/v1/tiles/osm/{z}/{x}/{y}.png',
+        url: 'http://localhost:8002/api/v1/tiles/osm/{z}/{x}/{y}.png',
         credit: '© OpenStreetMap contributors',
         maximumLevel: 18,
         minimumLevel: 0,

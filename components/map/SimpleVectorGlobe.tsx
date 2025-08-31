@@ -83,7 +83,7 @@ export default function SimpleVectorGlobe({
   showBuildings = true,
   dataLayers = {
     roads: true,
-    buildings: true,
+    buildings: false, // Buildings off by default until user enables them
     waterways: true,
     parks: true,
     labels: true,
@@ -103,6 +103,9 @@ export default function SimpleVectorGlobe({
   const buildingsRef = useRef<any>(null);
   const [currentZoomLevel, setCurrentZoomLevel] = useState<number>(3);
   const roadEntitiesRef = useRef<any[]>([]);
+  const buildingLoadingRef = useRef<boolean>(false);
+  const buildingCacheRef = useRef<Map<string, any>>(new Map()); // Pre-loaded building data cache
+  const renderedTilesRef = useRef<Set<string>>(new Set()); // Track what's currently rendered
 
   useEffect(() => {
     setIsMounted(true);
@@ -115,111 +118,183 @@ export default function SimpleVectorGlobe({
     return { x, y, z: zoom };
   };
 
-  // Load building data for visible tiles
+  // Pre-load building data in background for instant rendering
+  const preloadBuildingData = async (centerLat: number, centerLon: number, radius: number = 3) => {
+    const zoomLevel = 13;
+    const centerTileX = Math.floor((centerLon + 180) / 360 * Math.pow(2, zoomLevel));
+    const centerTileY = Math.floor((1 - Math.log(Math.tan(centerLat * Math.PI / 180) + 1 / Math.cos(centerLat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoomLevel));
+    
+    const tilesToPreload = [];
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        tilesToPreload.push([centerTileX + dx, centerTileY + dy]);
+      }
+    }
+    
+    console.log(`🏢 Pre-loading ${tilesToPreload.length} tiles around [${centerLat.toFixed(3)}, ${centerLon.toFixed(3)}]`);
+    
+    // Load all tiles in parallel for instant access
+    const promises = tilesToPreload.map(async ([x, y]) => {
+      const tileKey = `${zoomLevel}/${x}/${y}`;
+      
+      if (buildingCacheRef.current.has(tileKey)) {
+        return; // Already cached
+      }
+      
+      try {
+        const response = await fetch(`http://localhost:8002/api/v1/tiles/buildings/${zoomLevel}/${x}/${y}.json`);
+        if (response.ok) {
+          const data = await response.json();
+          buildingCacheRef.current.set(tileKey, data);
+          console.log(`🏢 Cached ${data?.features?.length || 0} buildings for tile ${tileKey}`);
+        }
+      } catch (error) {
+        buildingCacheRef.current.set(tileKey, null); // Cache empty result
+      }
+    });
+    
+    await Promise.all(promises);
+    console.log(`🏢 Pre-loading complete - ${buildingCacheRef.current.size} tiles cached`);
+  };
+
+  // Load building data using efficient Cesium primitives
   const loadBuildingsForView = async (viewer: any) => {
-    if (!buildingsRef.current || !viewer) {
-      console.log('🏢 Cannot load buildings - buildingsRef:', !!buildingsRef.current, 'viewer:', !!viewer);
+    if (!buildingsRef.current || !viewer || !dataLayers.buildings) {
       return;
     }
     
-    const camera = viewer.camera;
-    const canvas = viewer.canvas;
-    
-    // Get viewport bounds
-    const upperLeft = camera.pickEllipsoid(new window.Cesium.Cartesian2(0, 0), viewer.scene.globe.ellipsoid);
-    const lowerRight = camera.pickEllipsoid(new window.Cesium.Cartesian2(canvas.clientWidth, canvas.clientHeight), viewer.scene.globe.ellipsoid);
-    
-    if (!upperLeft || !lowerRight) {
-      console.log('🏢 Cannot determine viewport bounds');
+    if (buildingLoadingRef.current) {
       return;
     }
     
-    const upperLeftCartographic = window.Cesium.Cartographic.fromCartesian(upperLeft);
-    const lowerRightCartographic = window.Cesium.Cartographic.fromCartesian(lowerRight);
+    buildingLoadingRef.current = true;
     
-    const north = window.Cesium.Math.toDegrees(upperLeftCartographic.latitude);
-    const south = window.Cesium.Math.toDegrees(lowerRightCartographic.latitude);
-    const west = window.Cesium.Math.toDegrees(upperLeftCartographic.longitude);
-    const east = window.Cesium.Math.toDegrees(lowerRightCartographic.longitude);
-    
-    // Use zoom level 15 for building data (city level detail)
-    const zoomLevel = Math.min(15, Math.max(11, Math.floor(currentZoomLevel)));
-    
-    // Get tile bounds
-    const topLeft = lonLatToTile(west, north, zoomLevel);
-    const bottomRight = lonLatToTile(east, south, zoomLevel);
-    
-    console.log(`🏢 Loading buildings for tiles: zoom=${zoomLevel}, x=[${topLeft.x}-${bottomRight.x}], y=[${topLeft.y}-${bottomRight.y}]`);
-    
-    // Load buildings for visible tiles
-    for (let x = topLeft.x; x <= bottomRight.x; x++) {
-      for (let y = topLeft.y; y <= bottomRight.y; y++) {
+    try {
+      // Buildings will be stored as entities for reliable rendering
+      
+      // Simple approach - use current camera center position
+      const camera = viewer.camera;
+      const cartographic = camera.positionCartographic;
+      const longitude = window.Cesium.Math.toDegrees(cartographic.longitude);
+      const latitude = window.Cesium.Math.toDegrees(cartographic.latitude);
+      
+      const zoomLevel = 13;
+      console.log(`🏢 Camera center: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+      
+      // Get tile for camera center
+      const centerTileX = Math.floor((longitude + 180) / 360 * Math.pow(2, zoomLevel));
+      const centerTileY = Math.floor((1 - Math.log(Math.tan(latitude * Math.PI / 180) + 1 / Math.cos(latitude * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoomLevel));
+      
+      // Load 3x3 grid around camera center
+      const tilesToLoad = [];
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          tilesToLoad.push([centerTileX + dx, centerTileY + dy]);
+        }
+      }
+      
+      console.log(`🏢 Loading 3x3 grid around center tile [${centerTileX},${centerTileY}]`);
+      
+      // Load all tiles in 3x3 grid
+      for (const [x, y] of tilesToLoad) {
         const tileKey = `${zoomLevel}/${x}/${y}`;
-        
-        // Skip if already loaded
-        if (buildingsRef.current.entities.has(tileKey)) continue;
-        
-        try {
-          const response = await fetch(`http://localhost:8002/api/v1/tiles/buildings/${zoomLevel}/${x}/${y}.json`);
           
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          
-          const buildingData = await response.json();
-          console.log(`🏢 Raw building data for tile ${tileKey}:`, buildingData ? `${buildingData.features?.length || 0} features` : 'null');
-          
-          // Handle null or invalid responses
-          if (!buildingData || buildingData === null) {
-            console.warn(`Building API returned null for tile ${tileKey}`);
-            buildingsRef.current.entities.set(tileKey, []);
+          // Skip if already loaded
+          if (buildingsRef.current.loadedTiles.has(tileKey)) {
             continue;
           }
           
-          if (buildingData.features && buildingData.features.length > 0) {
-            buildingData.features.forEach((feature: any) => {
-              const geometry = feature.geometry;
-              const properties = feature.properties;
+          let buildingData = null;
+          
+          // Try to get from cache first for instant rendering
+          if (buildingCacheRef.current.has(tileKey)) {
+            buildingData = buildingCacheRef.current.get(tileKey);
+            console.log(`🏢 Using cached data for tile ${tileKey} (${buildingData?.features?.length || 0} buildings)`);
+          } else {
+            // Fallback to network request if not cached
+            try {
+              console.log(`🏢 Loading tile ${tileKey} from network`);
+              const response = await fetch(`http://localhost:8002/api/v1/tiles/buildings/${zoomLevel}/${x}/${y}.json`);
               
-              if (geometry.type === 'Polygon' && geometry.coordinates[0]) {
-                const positions = geometry.coordinates[0].map((coord: number[]) => 
-                  window.Cesium.Cartesian3.fromDegrees(coord[0], coord[1])
-                );
-                
-                const height = properties.height || 10;
-                const extrudedHeight = height;
-                
-                const entity = viewer.entities.add({
-                  name: properties.name || 'Building',
-                  polygon: {
-                    hierarchy: positions,
-                    height: 0,
-                    extrudedHeight: extrudedHeight,
-                    material: isDarkTheme 
-                      ? window.Cesium.Color.fromCssColorString('rgba(150, 150, 180, 0.9)')
-                      : window.Cesium.Color.fromCssColorString('rgba(220, 220, 240, 0.95)'),
-                    outline: false,
-                    show: buildingsRef.current.show
-                  }
-                });
-                
-                // Store entity reference
-                if (!buildingsRef.current.entities.has(tileKey)) {
-                  buildingsRef.current.entities.set(tileKey, []);
+              if (!response.ok) {
+                buildingsRef.current.loadedTiles.add(tileKey);
+                continue;
+              }
+              
+              buildingData = await response.json();
+              // Cache for future use
+              buildingCacheRef.current.set(tileKey, buildingData);
+            } catch (error) {
+              console.error(`🏢 Error loading tile ${tileKey}:`, error);
+              buildingCacheRef.current.loadedTiles.add(tileKey);
+              continue;
+            }
+          }
+          
+          if (!buildingData?.features?.length) {
+            buildingsRef.current.loadedTiles.add(tileKey);
+            continue;
+          }
+            
+            console.log(`🏢 Processing ${buildingData.features.length} buildings from tile ${tileKey}`);
+            
+            // Create individual entities - much more reliable than primitives
+            const entities: any[] = [];
+            
+            // Limit to reasonable amount per tile for performance
+            const maxBuildingsPerTile = 100;
+            const buildings = buildingData.features.slice(0, maxBuildingsPerTile);
+            
+            buildings.forEach((feature: any, i: number) => {
+              if (feature.geometry?.type === 'Polygon' && feature.geometry.coordinates?.[0]) {
+                try {
+                  const coords = feature.geometry.coordinates[0];
+                  const positions = coords.map((coord: number[]) => 
+                    window.Cesium.Cartesian3.fromDegrees(coord[0], coord[1])
+                  );
+                  
+                  const height = Math.max(feature.properties?.height || 20, 15); // Taller buildings
+                  
+                  const entity = viewer.entities.add({
+                    name: `Building-${tileKey}-${i}`,
+                    polygon: {
+                      hierarchy: positions,
+                      height: 0,
+                      extrudedHeight: height,
+                      material: window.Cesium.Color.DARKGRAY,
+                      outline: true,
+                      outlineColor: window.Cesium.Color.BLACK,
+                      show: buildingsRef.current?.show || false, // Respect current building visibility state
+                      heightReference: window.Cesium.HeightReference.CLAMP_TO_GROUND,
+                      extrudedHeightReference: window.Cesium.HeightReference.RELATIVE_TO_GROUND
+                    }
+                  });
+                  
+                  entities.push(entity);
+                  
+                } catch (error) {
+                  // Skip invalid buildings
                 }
-                buildingsRef.current.entities.get(tileKey).push(entity);
               }
             });
             
-            console.log(`🏢 Loaded ${buildingData.features.length} buildings for tile ${tileKey}`);
-            console.log(`🏢 Building entities created: ${buildingsRef.current.entities.get(tileKey).length}, buildings layer enabled: ${dataLayers.buildings}`);
-          }
-        } catch (error) {
-          console.warn(`Failed to load buildings for tile ${tileKey}:`, error);
-          // Mark tile as attempted to avoid retry loops
-          buildingsRef.current.entities.set(tileKey, []);
+            // Store entities for this tile
+            buildingsRef.current.entities.set(tileKey, entities);
+            console.log(`🏢 Created ${entities.length} building entities for tile ${tileKey}`);
+            
+            buildingsRef.current.loadedTiles.add(tileKey);
         }
+      
+      // Force visibility update after loading all tiles
+      if (buildingsRef.current.entities && buildingsRef.current.show) {
+        toggleBuildingVisibility(true);
+        console.log('🏢 Forced visibility update after loading all tiles');
       }
+      
+    } catch (error) {
+      console.error('🏢 Error loading buildings:', error);
+    } finally {
+      buildingLoadingRef.current = false;
     }
   };
 
@@ -228,18 +303,20 @@ export default function SimpleVectorGlobe({
     if (!buildingsRef.current) return;
     
     buildingsRef.current.show = show;
-    console.log(`🏢 toggleBuildingVisibility called with show=${show}, total tiles: ${buildingsRef.current.entities.size}`);
+    console.log(`🏢 toggleBuildingVisibility called with show=${show}, total tiles: ${buildingsRef.current.entities?.size || 0}`);
     
     // Update all building entities
     let totalEntities = 0;
-    buildingsRef.current.entities.forEach((entities: any[]) => {
-      totalEntities += entities.length;
-      entities.forEach((entity: any) => {
-        if (entity.polygon) {
-          entity.polygon.show = show;
-        }
+    if (buildingsRef.current.entities) {
+      buildingsRef.current.entities.forEach((entities: any[]) => {
+        totalEntities += entities.length;
+        entities.forEach((entity: any) => {
+          if (entity.polygon) {
+            entity.polygon.show = show;
+          }
+        });
       });
-    });
+    }
     console.log(`🏢 Updated visibility for ${totalEntities} building entities`);
   };
 
@@ -794,7 +871,8 @@ export default function SimpleVectorGlobe({
         if (showBuildings) {
           buildingsRef.current = {
             show: false,
-            entities: new Map() // Track building entities by tile key
+            entities: new Map(), // Track building entities by tile
+            loadedTiles: new Set() // Track loaded tiles
           };
           console.log('✅ Custom building system initialized');
         }
@@ -823,9 +901,9 @@ export default function SimpleVectorGlobe({
             onHeadingChange(headingDegrees);
           }
           
-          // Show buildings only when zoomed in to city level (zoom >= 11) AND buildings layer is enabled
+          // Show buildings when zoomed in (zoom >= 8) AND buildings layer is enabled
           if (buildingsRef.current) {
-            const shouldShowBuildings = zoomLevel >= 11 && dataLayers.buildings;
+            const shouldShowBuildings = zoomLevel >= 8 && dataLayers.buildings;
             if (buildingsRef.current.show !== shouldShowBuildings) {
               toggleBuildingVisibility(shouldShowBuildings);
               console.log(`🏢 Buildings ${shouldShowBuildings ? 'SHOWN' : 'HIDDEN'} at zoom level ${Math.round(zoomLevel * 10) / 10} (buildings layer: ${dataLayers.buildings})`);
@@ -833,6 +911,13 @@ export default function SimpleVectorGlobe({
               // Load building data when showing for the first time
               if (shouldShowBuildings) {
                 await loadBuildingsForView(viewer);
+                
+                // Also start pre-loading for seamless experience
+                const position = viewer.camera.positionCartographic;
+                const longitude = window.Cesium.Math.toDegrees(position.longitude);
+                const latitude = window.Cesium.Math.toDegrees(position.latitude);
+                console.log('🏢 Starting initial pre-loading for seamless experience...');
+                preloadBuildingData(latitude, longitude, 4); // Pre-load 9x9 grid initially
               }
             }
           }
@@ -841,10 +926,21 @@ export default function SimpleVectorGlobe({
         viewer.camera.moveEnd.addEventListener(updateCameraState);
         viewer.camera.changed.addEventListener(updateCameraState);
         
-        // Also load buildings when camera stops moving
-        viewer.camera.moveEnd.addEventListener(() => {
-          if (buildingsRef.current && buildingsRef.current.show && currentZoomLevel >= 11 && dataLayers.buildings) {
-            loadBuildingsForView(viewer);
+        // Also load buildings when camera stops moving AND pre-load nearby data
+        viewer.camera.moveEnd.addEventListener(async () => {
+          if (buildingsRef.current && buildingsRef.current.show && currentZoomLevel >= 8 && dataLayers.buildings) {
+            await loadBuildingsForView(viewer);
+          }
+          
+          // Pre-load building data for nearby areas for seamless experience
+          if (buildingsRef.current && currentZoomLevel >= 8 && dataLayers.buildings) {
+            const position = viewer.camera.positionCartographic;
+            const longitude = window.Cesium.Math.toDegrees(position.longitude);
+            const latitude = window.Cesium.Math.toDegrees(position.latitude);
+            
+            // Pre-load buildings in a larger radius for instant access
+            console.log('🏢 Pre-loading building data for nearby areas...');
+            preloadBuildingData(latitude, longitude, 5); // Pre-load 11x11 grid around current view
           }
         });
 
@@ -1155,80 +1251,84 @@ export default function SimpleVectorGlobe({
 
     const viewer = viewerRef.current;
     
-    // Remove existing imagery layers
-    viewer.imageryLayers.removeAll();
-    
-    // Add appropriate imagery based on current layer selection
-    let imageryProvider;
-    
-    switch(currentLayer) {
-      case 'cartodb-light':
-        imageryProvider = new window.Cesium.UrlTemplateImageryProvider({
-          url: dataLayers?.labels 
-            ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
-            : 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png',
-          credit: '© OpenStreetMap contributors | CartoDB',
-          subdomains: ['a', 'b', 'c', 'd'],
-          maximumLevel: 18
-        });
-        break;
-        
-      case 'cartodb-dark':
-        imageryProvider = new window.Cesium.UrlTemplateImageryProvider({
-          url: dataLayers?.labels 
-            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
-            : 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-          credit: '© OpenStreetMap contributors | CartoDB',
-          subdomains: ['a', 'b', 'c', 'd'],
-          maximumLevel: 18
-        });
-        break;
-        
-      case 'esri-worldimagery':
-        imageryProvider = new window.Cesium.UrlTemplateImageryProvider({
-          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-          credit: '© Esri, Maxar, Earthstar Geographics, and the GIS User Community',
-          maximumLevel: 19
-        });
-        break;
-        
-      default:
-        // Fallback to CartoDB light
-        imageryProvider = new window.Cesium.UrlTemplateImageryProvider({
-          url: dataLayers?.labels 
-            ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
-            : 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png',
-          credit: '© OpenStreetMap contributors | CartoDB',
-          subdomains: ['a', 'b', 'c', 'd'],
-          maximumLevel: 18
-        });
-    }
-    
-    viewer.imageryLayers.addImageryProvider(imageryProvider);
-    
-    // Update water appearance based on current layer
-    if (currentLayer === 'osm-standard') {
-      viewer.scene.globe.showWaterEffect = true;
-      viewer.scene.globe.oceanNormalMapUrl = '/cesium/Assets/Textures/waterNormals.jpg';
-      viewer.scene.globe.baseColor = window.Cesium.Color.fromCssColorString('#1e3a5f'); // Dark blue water
-    } else {
-      viewer.scene.globe.showWaterEffect = false;
-      viewer.scene.globe.baseColor = window.Cesium.Color.fromCssColorString('#000000'); // Default
-    }
-    
-    // Handle building layer toggle
-    if (buildingsRef.current && buildingsRef.current.show !== dataLayers.buildings) {
-      toggleBuildingVisibility(dataLayers.buildings);
-      console.log(`🏢 Buildings layer toggled: ${dataLayers.buildings ? 'ENABLED' : 'DISABLED'}`);
+    const updateLayers = async () => {
+      // Remove existing imagery layers
+      viewer.imageryLayers.removeAll();
       
-      // Load building data if enabled and at appropriate zoom
-      if (dataLayers.buildings && currentZoomLevel >= 11) {
-        loadBuildingsForView(viewer);
+      // Add appropriate imagery based on current layer selection
+      let imageryProvider;
+      
+      switch(currentLayer) {
+        case 'cartodb-light':
+          imageryProvider = new window.Cesium.UrlTemplateImageryProvider({
+            url: dataLayers?.labels 
+              ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
+              : 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png',
+            credit: '© OpenStreetMap contributors | CartoDB',
+            subdomains: ['a', 'b', 'c', 'd'],
+            maximumLevel: 18
+          });
+          break;
+          
+        case 'cartodb-dark':
+          imageryProvider = new window.Cesium.UrlTemplateImageryProvider({
+            url: dataLayers?.labels 
+              ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+              : 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+            credit: '© OpenStreetMap contributors | CartoDB',
+            subdomains: ['a', 'b', 'c', 'd'],
+            maximumLevel: 18
+          });
+          break;
+          
+        case 'esri-worldimagery':
+          imageryProvider = new window.Cesium.UrlTemplateImageryProvider({
+            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            credit: '© Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+            maximumLevel: 19
+          });
+          break;
+          
+        default:
+          // Fallback to CartoDB light
+          imageryProvider = new window.Cesium.UrlTemplateImageryProvider({
+            url: dataLayers?.labels 
+              ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
+              : 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png',
+            credit: '© OpenStreetMap contributors | CartoDB',
+            subdomains: ['a', 'b', 'c', 'd'],
+            maximumLevel: 18
+          });
       }
-    }
+      
+      viewer.imageryLayers.addImageryProvider(imageryProvider);
+      
+      // Update water appearance based on current layer
+      if (currentLayer === 'osm-standard') {
+        viewer.scene.globe.showWaterEffect = true;
+        viewer.scene.globe.oceanNormalMapUrl = '/cesium/Assets/Textures/waterNormals.jpg';
+        viewer.scene.globe.baseColor = window.Cesium.Color.fromCssColorString('#1e3a5f'); // Dark blue water
+      } else {
+        viewer.scene.globe.showWaterEffect = false;
+        viewer.scene.globe.baseColor = window.Cesium.Color.fromCssColorString('#000000'); // Default
+      }
+      
+      // Handle building layer toggle
+      if (buildingsRef.current && buildingsRef.current.show !== dataLayers.buildings) {
+        // Load building data first if enabling and at appropriate zoom
+        if (dataLayers.buildings && currentZoomLevel >= 8) {
+          await loadBuildingsForView(viewer);
+        }
+        
+        toggleBuildingVisibility(dataLayers.buildings);
+        console.log(`🏢 Buildings layer toggled: ${dataLayers.buildings ? 'ENABLED' : 'DISABLED'}`);
+      }
+      
+      console.log(`✅ ${currentLayer} tiles updated with labels:`, dataLayers?.labels);
+      console.log('Current theme state:', { currentLayer, isDarkTheme, useVectorTiles });
+    };
     
-    console.log(`✅ ${currentLayer} tiles updated with labels:`, dataLayers?.labels);
-    console.log('Current theme state:', { currentLayer, isDarkTheme, useVectorTiles });
+    updateLayers();
   }, [isLoaded, currentLayer, dataLayers]);
 
   // Convert zoom level to camera height for Cesium

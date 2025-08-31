@@ -8,7 +8,7 @@ export const VECTOR_STYLES: Record<string, VectorTileStyle> = {
     sources: {
       'osm': {
         type: 'vector',
-        tiles: ['http://localhost:8001/api/v1/tiles/vector-hybrid/{z}/{x}/{y}.mvt'],
+        tiles: ['http://localhost:8002/api/v1/tiles/vector-hybrid/{z}/{x}/{y}.mvt'],
         maxzoom: 14
       }
     },
@@ -102,7 +102,7 @@ export const VECTOR_STYLES: Record<string, VectorTileStyle> = {
     sources: {
       'osm': {
         type: 'vector',
-        tiles: ['http://localhost:8001/api/v1/tiles/vector-hybrid/{z}/{x}/{y}.mvt'],
+        tiles: ['http://localhost:8002/api/v1/tiles/vector-hybrid/{z}/{x}/{y}.mvt'],
         maxzoom: 14
       }
     },
@@ -196,7 +196,7 @@ export const VECTOR_STYLES: Record<string, VectorTileStyle> = {
     sources: {
       'osm': {
         type: 'vector',
-        tiles: ['http://localhost:8001/api/v1/tiles/vector-hybrid/{z}/{x}/{y}.mvt'],
+        tiles: ['http://localhost:8002/api/v1/tiles/vector-hybrid/{z}/{x}/{y}.mvt'],
         maxzoom: 14
       }
     },
