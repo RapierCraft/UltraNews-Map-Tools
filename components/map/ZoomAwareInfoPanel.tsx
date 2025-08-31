@@ -240,7 +240,7 @@ export default function ZoomAwareInfoPanel({ clickInfo, onClose }: ZoomAwareInfo
           else if (clickInfo.zoom <= 11) searchTerm = `${title} city`;
         }
         
-        const data = await WikipediaAPI.getPageSummary(searchTerm);
+        const data = await WikipediaAPI.getPageSummary(searchTerm, { lat: clickInfo.lat, lon: clickInfo.lon });
         setWikiData(data);
       } catch (error) {
         console.error('Failed to fetch Wikipedia data:', error);

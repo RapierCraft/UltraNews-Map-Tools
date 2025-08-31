@@ -10,7 +10,8 @@ import {
   ExternalLink, 
   MapPin, 
   Globe,
-  Expand
+  Expand,
+  Route
 } from 'lucide-react';
 import EnhancedWikipediaContent from './EnhancedWikipediaContent';
 import FullArticleModal from './FullArticleModal';
@@ -25,6 +26,8 @@ interface LocationData {
   type?: string;
   class?: string;
   tags?: { [key: string]: string };
+  isLoading?: boolean;
+  fullData?: any;
 }
 
 interface WikipediaData {
@@ -83,6 +86,16 @@ const getLocationTypeConfig = (isDark: boolean, locationType?: string) => {
       bgGradient: isDark 
         ? 'from-gray-900/30 to-slate-900/30' 
         : 'from-gray-50 to-slate-50'
+    },
+    highway: {
+      icon: Route,
+      label: 'Road',
+      color: isDark 
+        ? 'bg-orange-500/20 text-orange-300 border-orange-800/50' 
+        : 'bg-orange-500/10 text-orange-700 border-orange-200',
+      bgGradient: isDark 
+        ? 'from-orange-900/30 to-red-900/30' 
+        : 'from-orange-50 to-red-50'
     }
   };
 
@@ -105,6 +118,13 @@ export default function LocationInfoModal({ location, onClose, onExpand }: Locat
 
   // Fetch enriched data
   useEffect(() => {
+    // Don't fetch Wikipedia data if location is still loading basic info
+    if (location.isLoading || location.name === 'Loading...') {
+      setWikiData(null);
+      setIsLoadingWiki(false);
+      return;
+    }
+
     const fetchData = async () => {
       setIsLoadingWiki(true);
       try {
@@ -114,7 +134,7 @@ export default function LocationInfoModal({ location, onClose, onExpand }: Locat
           searchTerm = `${searchTerm}`;
         }
         
-        const data = await WikipediaAPI.getPageSummary(searchTerm);
+        const data = await WikipediaAPI.getPageSummary(searchTerm, { lat: location.lat, lon: location.lon });
         setWikiData(data);
       } catch (error) {
         console.error('Failed to fetch data:', error);
@@ -125,7 +145,7 @@ export default function LocationInfoModal({ location, onClose, onExpand }: Locat
     };
 
     fetchData();
-  }, [location]);
+  }, [location, location.isLoading]);
 
   // Handle expand from parent modal
   useEffect(() => {
@@ -146,8 +166,15 @@ export default function LocationInfoModal({ location, onClose, onExpand }: Locat
               <IconComponent className="w-5 h-5" />
             </div>
             <div>
-              <h3 className={`text-lg font-bold ${textColor} leading-tight`}>
-                {location.name.split(',')[0]}
+              <h3 className={`text-lg font-bold ${textColor} leading-tight flex items-center gap-2`}>
+                {location.isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                    <span>Loading location...</span>
+                  </>
+                ) : (
+                  location.name.split(',')[0]
+                )}
               </h3>
               <Badge variant="secondary" className={`text-xs font-medium ${config.color} border-0 mt-1`}>
                 {config.label}
@@ -167,6 +194,54 @@ export default function LocationInfoModal({ location, onClose, onExpand }: Locat
       <CardContent className="flex-1 min-h-0 px-4 py-1">
         <div className="w-full h-full flex flex-col mt-2">
           <div className="space-y-3 pr-2 overflow-y-auto max-h-full">
+            {/* Road/Highway Information */}
+            {(location.class === 'highway' || (location.tags && location.tags.highway)) && (
+              <div className="space-y-2 mb-4">
+                <h4 className={`font-semibold text-sm ${textColor} flex items-center gap-2`}>
+                  <Route className="w-4 h-4" />
+                  Road Information
+                </h4>
+                <div className="grid gap-2">
+                  {location.tags?.highway && (
+                    <div className={`text-xs p-2 rounded ${isDark ? 'bg-gray-800/60' : 'bg-white/80'} border ${isDark ? 'border-gray-700/40' : 'border-gray-200/60'}`}>
+                      <span className={`font-medium ${subtextColor} uppercase`}>Type:</span>
+                      <span className={`ml-2 ${textColor}`}>{location.tags.highway.replace(/_/g, ' ')}</span>
+                    </div>
+                  )}
+                  {location.tags?.maxspeed && (
+                    <div className={`text-xs p-2 rounded ${isDark ? 'bg-gray-800/60' : 'bg-white/80'} border ${isDark ? 'border-gray-700/40' : 'border-gray-200/60'}`}>
+                      <span className={`font-medium ${subtextColor} uppercase`}>Max Speed:</span>
+                      <span className={`ml-2 ${textColor}`}>{location.tags.maxspeed}</span>
+                    </div>
+                  )}
+                  {location.tags?.lanes && (
+                    <div className={`text-xs p-2 rounded ${isDark ? 'bg-gray-800/60' : 'bg-white/80'} border ${isDark ? 'border-gray-700/40' : 'border-gray-200/60'}`}>
+                      <span className={`font-medium ${subtextColor} uppercase`}>Lanes:</span>
+                      <span className={`ml-2 ${textColor}`}>{location.tags.lanes}</span>
+                    </div>
+                  )}
+                  {location.tags?.surface && (
+                    <div className={`text-xs p-2 rounded ${isDark ? 'bg-gray-800/60' : 'bg-white/80'} border ${isDark ? 'border-gray-700/40' : 'border-gray-200/60'}`}>
+                      <span className={`font-medium ${subtextColor} uppercase`}>Surface:</span>
+                      <span className={`ml-2 ${textColor}`}>{location.tags.surface}</span>
+                    </div>
+                  )}
+                  {(location as any).distance_km && (
+                    <div className={`text-xs p-2 rounded ${isDark ? 'bg-blue-800/60' : 'bg-blue-50/80'} border ${isDark ? 'border-blue-700/40' : 'border-blue-200/60'}`}>
+                      <span className={`font-medium ${subtextColor} uppercase`}>Total Distance:</span>
+                      <span className={`ml-2 ${textColor}`}>{(location as any).distance_km.toFixed(2)} km</span>
+                    </div>
+                  )}
+                  {(location as any).intersections !== undefined && (
+                    <div className={`text-xs p-2 rounded ${isDark ? 'bg-green-800/60' : 'bg-green-50/80'} border ${isDark ? 'border-green-700/40' : 'border-green-200/60'}`}>
+                      <span className={`font-medium ${subtextColor} uppercase`}>Intersections:</span>
+                      <span className={`ml-2 ${textColor}`}>{(location as any).intersections}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* POI Information */}
             {location.tags && Object.keys(location.tags).length > 0 && (
               <div className="space-y-2 mb-4">

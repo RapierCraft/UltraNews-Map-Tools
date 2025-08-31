@@ -36,6 +36,73 @@ export class WikipediaAPI {
   private static baseURL = 'https://en.wikipedia.org/api/rest_v1';
   private static apiURL = 'https://en.wikipedia.org/w/api.php';
 
+  /**
+   * Find the most relevant Wikipedia page based on title and geographic coordinates
+   */
+  private static async getGeoContextualPage(title: string, coordinates: { lat: number; lon: number }): Promise<string | null> {
+    try {
+      console.log(`🌍 Searching for geo-contextual Wikipedia page: "${title}" near ${coordinates.lat}, ${coordinates.lon}`);
+      
+      // Use Wikipedia's geosearch to find pages near the coordinates
+      const geoSearchResponse = await fetch(
+        `${this.apiURL}?action=query&format=json&list=geosearch&gscoord=${coordinates.lat}|${coordinates.lon}&gsradius=10000&gslimit=10&origin=*`
+      );
+      
+      if (!geoSearchResponse.ok) return null;
+      
+      const geoData = await geoSearchResponse.json();
+      const geoResults = geoData.query?.geosearch || [];
+      
+      // Also search for pages with the title
+      const searchResponse = await fetch(
+        `${this.apiURL}?action=query&format=json&list=search&srsearch=${encodeURIComponent(title)}&srlimit=10&origin=*`
+      );
+      
+      if (!searchResponse.ok) return null;
+      
+      const searchData = await searchResponse.json();
+      const searchResults = searchData.query?.search || [];
+      
+      console.log(`📍 Found ${geoResults.length} geo results and ${searchResults.length} search results`);
+      
+      // Try to find matches between geographic results and title search results
+      const geoTitles = new Set(geoResults.map((result: any) => result.title.toLowerCase()));
+      
+      // First, look for exact or close matches in geographic results
+      for (const searchResult of searchResults) {
+        const searchTitle = searchResult.title.toLowerCase();
+        if (geoTitles.has(searchTitle)) {
+          console.log(`✅ Found geo-contextual match: "${searchResult.title}"`);
+          return searchResult.title;
+        }
+      }
+      
+      // If no direct match, look for partial matches (contains the search term)
+      for (const geoResult of geoResults) {
+        const geoTitle = geoResult.title.toLowerCase();
+        const searchTerm = title.toLowerCase();
+        if (geoTitle.includes(searchTerm) || searchTerm.includes(geoTitle)) {
+          console.log(`🎯 Found partial geo match: "${geoResult.title}"`);
+          return geoResult.title;
+        }
+      }
+      
+      // If still no match, return the closest geographic result if it's relevant
+      if (geoResults.length > 0) {
+        const closest = geoResults[0];
+        console.log(`📍 Using closest geographic result: "${closest.title}" (${closest.dist}m away)`);
+        return closest.title;
+      }
+      
+      console.log(`❌ No geo-contextual match found for "${title}"`);
+      return null;
+      
+    } catch (error) {
+      console.error('Error in geo-contextual search:', error);
+      return null;
+    }
+  }
+
   static async getFullArticle(title: string): Promise<{title: string; content: string; url: string} | null> {
     try {
       const response = await fetch(
@@ -57,8 +124,16 @@ export class WikipediaAPI {
     }
   }
 
-  static async getPageSummary(title: string): Promise<WikipediaPage | null> {
+  static async getPageSummary(title: string, coordinates?: { lat: number; lon: number }): Promise<WikipediaPage | null> {
     try {
+      // If coordinates are provided, first try to find the best geographic match
+      if (coordinates) {
+        const geoResult = await this.getGeoContextualPage(title, coordinates);
+        if (geoResult) {
+          title = geoResult;
+        }
+      }
+
       // Get page summary
       const summaryResponse = await fetch(
         `${this.baseURL}/page/summary/${encodeURIComponent(title)}`

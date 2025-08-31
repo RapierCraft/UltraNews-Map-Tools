@@ -572,7 +572,7 @@ export function LocationInfoContent({ location }: LocationInfoContentProps) {
           searchTerm = `${searchTerm}`;
         }
         
-        const data = await WikipediaAPI.getPageSummary(searchTerm);
+        const data = await WikipediaAPI.getPageSummary(searchTerm, { lat: location.lat, lon: location.lon });
         setWikiData(data);
       } catch (error) {
         console.error('Failed to fetch Wikipedia data:', error);
