@@ -326,54 +326,328 @@ export default function BasicMap({
     }
   }, []);
 
-  // Handle POI click to show information modal (adapted for Cesium)
+  // Handle zoom-aware map clicks to show appropriate information
   const handleMapClick = useCallback(async (e: { position: { latitude: number; longitude: number }; screenPosition?: { x: number; y: number } }) => {
     const { latitude: lat, longitude: lng } = e.position;
     
+    console.log('Map click at zoom:', zoom, 'position:', lat, lng);
+    
+    // Determine what type of feature should be prioritized at this zoom level
+    let targetFeatureType = '';
+    
+    // Check if this might be a click on an administrative boundary
+    const isLikelyBoundaryClick = await checkForAdminBoundaryClick(lat, lng, zoom);
+    
+    if (isLikelyBoundaryClick) {
+      targetFeatureType = 'admin_boundary';
+    } else if (zoom <= 5) {
+      targetFeatureType = 'country';
+    } else if (zoom <= 8) {
+      targetFeatureType = 'state';
+    } else if (zoom <= 12) {
+      targetFeatureType = 'city';
+    } else if (zoom <= 15) {
+      targetFeatureType = 'road';
+    } else {
+      targetFeatureType = 'building';
+    }
+    
     try {
-      // Fetch POI data from OpenStreetMap Overpass API
-      const response = await fetch(
-        `https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];(node(around:100,${lat},${lng})[amenity];node(around:100,${lat},${lng})[shop];node(around:100,${lat},${lng})[tourism];node(around:100,${lat},${lng})[historic];node(around:100,${lat},${lng})[leisure];node(around:100,${lat},${lng})[office];);out geom;`
-      );
+      console.log('Performing smart geocode with target type:', targetFeatureType);
+      const result = await performSmartReverseGeocode(lat, lng, zoom, targetFeatureType);
+      console.log('Smart geocode result:', result);
       
-      if (response.ok) {
-        const data = await response.json();
-        const elements = data.elements;
+      if (result) {
+        // Create location data for the modal
+        const locationData = {
+          lat: parseFloat(result.lat) || lat,
+          lon: parseFloat(result.lon) || lng,
+          name: result.name || result.display_name?.split(',')[0] || 'Unknown Location',
+          osm_id: result.osm_id,
+          osm_type: result.osm_type || 'node',
+          type: result.type || 'unknown',
+          class: result.class || 'place',
+          tags: result.extratags || {}
+        };
         
-        if (elements && elements.length > 0) {
-          // Find closest POI
-          const closest = elements.reduce((closest: any, poi: any) => {
-            const distance = Math.sqrt(
-              Math.pow(poi.lat - lat, 2) + Math.pow(poi.lon - lng, 2)
-            );
-            return !closest || distance < closest.distance 
-              ? { ...poi, distance } 
-              : closest;
-          }, null);
-          
-          if (closest) {
-            // Create location data for the modal
-            const locationData = {
-              lat: closest.lat,
-              lon: closest.lon,
-              name: closest.tags?.name || closest.tags?.amenity || closest.tags?.shop || 'Unknown POI',
-              osm_id: closest.id,
-              osm_type: 'node',
-              type: closest.tags?.amenity || closest.tags?.shop || closest.tags?.tourism || 'poi',
-              class: 'poi',
-              tags: closest.tags
-            };
-            
-            setSelectedLocation(locationData);
-            setModalSourcePosition(e.screenPosition || { x: window.innerWidth / 2, y: window.innerHeight / 2 });
-            setShowLocationModal(true);
-          }
-        }
+        console.log('Setting location data:', locationData);
+        setSelectedLocation(locationData);
+        setModalSourcePosition(e.screenPosition || { x: window.innerWidth / 2, y: window.innerHeight / 2 });
+        setShowLocationModal(true);
+      } else {
+        console.log('No result returned from smart geocode');
       }
     } catch (error) {
-      console.error('Failed to fetch POI data:', error);
+      console.error('Feature click detection failed:', error);
     }
-  }, []);
+  }, [zoom]);
+
+  // Check if click might be on an administrative boundary by looking for nearby admin features
+  const checkForAdminBoundaryClick = async (lat: number, lon: number, zoom: number): Promise<boolean> => {
+    // For very low zoom (country level), always try boundary detection
+    if (zoom <= 5) return true;
+    
+    // Only check for boundaries at zoom levels where they're typically visible
+    if (zoom < 6 || zoom > 16) return false;
+    
+    try {
+      // Quick check: get a reverse geocoding result and see if we're near administrative boundaries
+      const params = new URLSearchParams({
+        lat: lat.toString(),
+        lon: lon.toString(),
+        zoom: '10', // Medium zoom for admin detection
+        format: 'json',
+        addressdetails: '1',
+      });
+
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?${params}`,
+        {
+          headers: {
+            'Accept-Language': 'en',
+            'User-Agent': 'MapMap-Tools/1.0',
+          }
+        }
+      );
+
+      if (!response.ok) return false;
+      
+      const result = await response.json();
+      
+      // Heuristic: if we have rich administrative info, user might be clicking on boundaries
+      const address = result.address || {};
+      const hasMultipleAdminLevels = [
+        address.country,
+        address.state || address.region || address.province,
+        address.county,
+        address.city || address.town,
+        address.suburb || address.district
+      ].filter(Boolean).length;
+      
+      // If we have 3+ admin levels and zoom is in boundary-visible range, likely a boundary click
+      return hasMultipleAdminLevels >= 3 && zoom >= 8 && zoom <= 15;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  // Smart reverse geocoding that tries to find the most relevant feature for the zoom level
+  const performSmartReverseGeocode = async (lat: number, lon: number, zoom: number, targetType: string) => {
+    try {
+      // For administrative boundaries, try multiple approaches
+      if (targetType === 'admin_boundary') {
+        return await detectAdminBoundary(lat, lon, zoom);
+      }
+      
+      // Use different zoom levels for Nominatim based on what we're looking for
+      const zoomMap: Record<string, number> = {
+        'country': 3,
+        'state': 5, 
+        'city': 10,
+        'road': 16,
+        'building': 18
+      };
+      
+      const nominatimZoom = zoomMap[targetType] || Math.floor(zoom);
+      
+      const params = new URLSearchParams({
+        lat: lat.toString(),
+        lon: lon.toString(),
+        zoom: nominatimZoom.toString(),
+        format: 'json',
+        addressdetails: '1',
+        extratags: '1',
+        namedetails: '1',
+      });
+
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?${params}`,
+        {
+          headers: {
+            'Accept-Language': 'en',
+            'User-Agent': 'MapMap-Tools/1.0',
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      // Post-process the result to match what should be visible at this zoom
+      return adaptResultForZoom(result, zoom, targetType);
+    } catch (error) {
+      console.error('Smart reverse geocoding failed:', error);
+      return null;
+    }
+  };
+
+  // Special function to detect administrative boundaries
+  const detectAdminBoundary = async (lat: number, lon: number, zoom: number) => {
+    try {
+      // For very low zoom (country level), use a different approach
+      if (zoom <= 5) {
+        return await detectCountryBoundary(lat, lon);
+      }
+      
+      // Fallback to regular reverse geocoding but prioritize admin features
+      const params = new URLSearchParams({
+        lat: lat.toString(),
+        lon: lon.toString(),
+        zoom: (zoom <= 10 ? Math.max(zoom - 2, 3) : Math.min(zoom, 14)).toString(),
+        format: 'json',
+        addressdetails: '1',
+        extratags: '1',
+      });
+
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?${params}`,
+        {
+          headers: {
+            'Accept-Language': 'en',
+            'User-Agent': 'MapMap-Tools/1.0',
+          }
+        }
+      );
+
+      if (!response.ok) return null;
+      
+      const result = await response.json();
+      return adaptAdminResult(result, zoom);
+    } catch (error) {
+      console.error('Admin boundary detection failed:', error);
+      return null;
+    }
+  };
+
+  // Special function to detect country boundaries at low zoom
+  const detectCountryBoundary = async (lat: number, lon: number) => {
+    try {
+      console.log('Detecting country boundary at:', lat, lon);
+      
+      const params = new URLSearchParams({
+        lat: lat.toString(),
+        lon: lon.toString(),
+        zoom: '3', // Low zoom for country detection
+        format: 'json',
+        addressdetails: '1',
+        extratags: '1',
+      });
+
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?${params}`,
+        {
+          headers: {
+            'Accept-Language': 'en',
+            'User-Agent': 'MapMap-Tools/1.0',
+          }
+        }
+      );
+
+      if (!response.ok) {
+        console.error('Country detection request failed:', response.status);
+        return null;
+      }
+
+      const result = await response.json();
+      console.log('Country detection result:', result);
+      
+      if (result && result.address?.country) {
+        // Force it to be a country boundary result
+        const adapted = {
+          ...result,
+          name: result.address.country,
+          display_name: result.address.country,
+          type: 'country',
+          class: 'boundary',
+          admin_level: '2', // Country level
+        };
+        
+        console.log('Adapted country result:', adapted);
+        return adapted;
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Country boundary detection failed:', error);
+      return null;
+    }
+  };
+
+  // Adapt admin results for display
+  const adaptAdminResult = (result: any, zoom: number) => {
+    if (!result) return null;
+    
+    const adapted = { ...result };
+    const address = result.address || {};
+    
+    // Force the result to show admin boundary information based on zoom level
+    if (zoom <= 5 && address.country) {
+      // Country level
+      adapted.display_name = address.country;
+      adapted.name = address.country;
+      adapted.type = 'country';
+      adapted.class = 'boundary';
+      adapted.admin_level = '2'; // Country level
+    } else if (zoom >= 6 && zoom <= 10 && address.state) {
+      // State level  
+      adapted.display_name = address.state;
+      adapted.name = address.state;
+      adapted.type = 'state';
+      adapted.class = 'boundary';
+      adapted.admin_level = '4'; // State level
+    } else if (zoom >= 8 && zoom <= 15 && address.state) {
+      adapted.display_name = address.state;
+      adapted.name = address.state;
+      adapted.type = 'state';
+      adapted.class = 'boundary';
+      adapted.admin_level = '4'; // State level
+    } else if (zoom >= 11 && zoom <= 16 && address.county) {
+      adapted.display_name = address.county;
+      adapted.name = address.county;
+      adapted.type = 'county';
+      adapted.class = 'boundary';
+      adapted.admin_level = '6'; // County level
+    }
+    
+    return adapted;
+  };
+
+  // Adapt the geocoding result to show the most appropriate information for the zoom level
+  const adaptResultForZoom = (result: any, zoom: number, targetType: string) => {
+    if (!result) return null;
+    
+    const adapted = { ...result };
+    const address = result.address || {};
+    
+    // Force the display name and type to match the zoom level expectation
+    if (targetType === 'country' && address.country) {
+      adapted.display_name = address.country;
+      adapted.name = address.country;
+      adapted.type = 'country';
+      adapted.class = 'place';
+    } else if (targetType === 'state' && address.state) {
+      adapted.display_name = address.state;
+      adapted.name = address.state;
+      adapted.type = 'state';
+      adapted.class = 'place';
+    } else if (targetType === 'city' && (address.city || address.town)) {
+      const cityName = address.city || address.town;
+      adapted.display_name = cityName;
+      adapted.name = cityName;
+      adapted.type = address.city ? 'city' : 'town';
+      adapted.class = 'place';
+    } else if (targetType === 'road' && address.road) {
+      adapted.display_name = address.road;
+      adapted.name = address.road;
+      adapted.type = 'highway'; 
+      adapted.class = 'highway';
+    }
+    
+    return adapted;
+  };
 
   // Clear all markers
   const clearMarkers = useCallback(() => {
@@ -584,18 +858,16 @@ export default function BasicMap({
       )}
 
       {/* UltraMaps Branding */}
-      <Card className="absolute bottom-4 left-4 z-[1000] px-3 py-2 bg-white/90 dark:bg-gray-800/90 backdrop-blur">
-        <div className="flex items-center gap-2">
-          <img 
-            src="/ultramaps-logo.png" 
-            alt="UltraMaps" 
-            className="w-6 h-6"
-          />
-          <span className="text-sm font-geist-sans font-medium text-gray-800 dark:text-gray-200">
-            UltraMaps
-          </span>
+      <div className="absolute bottom-4 left-4 z-[1000] flex items-center gap-3">
+        <img 
+          src="/ultramaps-logo.png" 
+          alt="UltraMaps" 
+          className="w-10 h-10 filter brightness-110"
+        />
+        <div className="text-xl font-geist-sans font-bold text-white tracking-tight leading-none">
+          UltraMaps
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

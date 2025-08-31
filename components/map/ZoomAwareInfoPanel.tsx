@@ -45,6 +45,13 @@ export default function ZoomAwareInfoPanel({ clickInfo, onClose }: ZoomAwareInfo
     
     const data = clickInfo.data;
     
+    // Special handling for administrative boundaries
+    if (data.class === 'boundary' || data.admin_level) {
+      if (data.type === 'state' || data.admin_level === '4') return <Flag className="h-5 w-5" />;
+      if (data.type === 'county' || data.admin_level === '6') return <Map className="h-5 w-5" />;
+      return <Globe className="h-5 w-5" />;
+    }
+    
     // Icon based on zoom level and data type
     if (clickInfo.zoom <= 5) {
       return <Globe className="h-5 w-5" />;  // Country level
@@ -72,6 +79,15 @@ export default function ZoomAwareInfoPanel({ clickInfo, onClose }: ZoomAwareInfo
     // Use the actual OSM type and class from the response to determine what was clicked
     const osmType = data.type;
     const osmClass = data.class;
+    
+    // Special handling for administrative boundaries
+    if (osmClass === 'boundary' || data.admin_level) {
+      if (data.name) return data.name;
+      if (osmType === 'state' && address.state) return address.state;
+      if (osmType === 'county' && address.county) return address.county;
+      if (address.state) return address.state;
+      if (address.county) return address.county;
+    }
     
     // For very low zoom (country level)
     if (clickInfo.zoom <= 5) {
@@ -129,8 +145,20 @@ export default function ZoomAwareInfoPanel({ clickInfo, onClose }: ZoomAwareInfo
     const address = data.address || {};
     const info: any = {};
     
+    // Special handling for administrative boundaries
+    if (data.class === 'boundary' || data.admin_level) {
+      info.Name = data.name || data.display_name?.split(',')[0];
+      info.Type = data.type ? data.type.replace(/_/g, ' ').toUpperCase() : 'Administrative Boundary';
+      if (data.admin_level) info['Admin Level'] = data.admin_level;
+      info.Country = address.country;
+      if (address.state) info.State = address.state;
+      if (address.county) info.County = address.county;
+      if (data.extratags?.ISO3166_1) info['ISO Code'] = data.extratags.ISO3166_1;
+      if (data.extratags?.population) info.Population = data.extratags.population;
+      if (data.extratags?.area) info.Area = data.extratags.area;
+    }
     // Show information based on actual zoom level, not inferred type
-    if (clickInfo.zoom <= 5) {
+    else if (clickInfo.zoom <= 5) {
       // Country level
       info.Country = address.country;
       if (address.continent) info.Continent = address.continent;
