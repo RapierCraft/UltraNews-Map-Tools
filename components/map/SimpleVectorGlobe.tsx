@@ -83,7 +83,7 @@ export default function SimpleVectorGlobe({
   showBuildings = true,
   dataLayers = {
     roads: true,
-    buildings: false,
+    buildings: true,
     waterways: true,
     parks: true,
     labels: true,
@@ -161,7 +161,20 @@ export default function SimpleVectorGlobe({
         
         try {
           const response = await fetch(`http://localhost:8002/api/v1/tiles/buildings/${zoomLevel}/${x}/${y}.json`);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
           const buildingData = await response.json();
+          console.log(`🏢 Raw building data for tile ${tileKey}:`, buildingData ? `${buildingData.features?.length || 0} features` : 'null');
+          
+          // Handle null or invalid responses
+          if (!buildingData || buildingData === null) {
+            console.warn(`Building API returned null for tile ${tileKey}`);
+            buildingsRef.current.entities.set(tileKey, []);
+            continue;
+          }
           
           if (buildingData.features && buildingData.features.length > 0) {
             buildingData.features.forEach((feature: any) => {
@@ -199,6 +212,7 @@ export default function SimpleVectorGlobe({
             });
             
             console.log(`🏢 Loaded ${buildingData.features.length} buildings for tile ${tileKey}`);
+            console.log(`🏢 Building entities created: ${buildingsRef.current.entities.get(tileKey).length}, buildings layer enabled: ${dataLayers.buildings}`);
           }
         } catch (error) {
           console.warn(`Failed to load buildings for tile ${tileKey}:`, error);
@@ -214,15 +228,19 @@ export default function SimpleVectorGlobe({
     if (!buildingsRef.current) return;
     
     buildingsRef.current.show = show;
+    console.log(`🏢 toggleBuildingVisibility called with show=${show}, total tiles: ${buildingsRef.current.entities.size}`);
     
     // Update all building entities
+    let totalEntities = 0;
     buildingsRef.current.entities.forEach((entities: any[]) => {
+      totalEntities += entities.length;
       entities.forEach((entity: any) => {
         if (entity.polygon) {
           entity.polygon.show = show;
         }
       });
     });
+    console.log(`🏢 Updated visibility for ${totalEntities} building entities`);
   };
 
   // Fetch and display administrative boundaries
@@ -830,11 +848,11 @@ export default function SimpleVectorGlobe({
           }
         });
 
-        // Handle clicks
+        // Handle double-clicks to open information modal
         if (onClick) {
           viewer.cesiumWidget.screenSpaceEventHandler.setInputAction(
             (event: any) => {
-              // Handle map clicks
+              // Handle map double-clicks
               const pickedPosition = viewer.camera.pickEllipsoid(event.position, viewer.scene.globe.ellipsoid);
               if (pickedPosition) {
                 const cartographic = window.Cesium.Cartographic.fromCartesian(pickedPosition);
@@ -847,7 +865,7 @@ export default function SimpleVectorGlobe({
                 });
               }
             },
-            window.Cesium.ScreenSpaceEventType.LEFT_CLICK
+            window.Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK
           );
         }
 

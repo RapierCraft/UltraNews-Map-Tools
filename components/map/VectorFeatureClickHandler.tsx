@@ -14,7 +14,7 @@ export default function VectorFeatureClickHandler({ onFeatureClick }: VectorFeat
   useEffect(() => {
     if (!map) return;
 
-    const handleClick = async (e: any) => {
+    const handleDoubleClick = async (e: any) => {
       const zoom = map.getZoom();
       const point = e.containerPoint;
       const latlng = e.latlng;
@@ -22,7 +22,7 @@ export default function VectorFeatureClickHandler({ onFeatureClick }: VectorFeat
       // Try to detect what's actually visible at this zoom level by looking at the tile layers
       // Since we're using raster tiles, we need to simulate feature detection based on zoom
       
-      console.log('Map click at zoom:', zoom, 'point:', latlng);
+      console.log('Map double-click at zoom:', zoom, 'point:', latlng);
       
       // Determine what type of feature should be prioritized at this zoom level
       let targetFeatureType = '';
@@ -63,13 +63,13 @@ export default function VectorFeatureClickHandler({ onFeatureClick }: VectorFeat
       }
     };
 
-    // Add click handler
-    map.on('click', handleClick);
-    handlerRef.current = handleClick;
+    // Add double-click handler
+    map.on('dblclick', handleDoubleClick);
+    handlerRef.current = handleDoubleClick;
 
     return () => {
       if (handlerRef.current) {
-        map.off('click', handlerRef.current);
+        map.off('dblclick', handlerRef.current);
       }
     };
   }, [map, onFeatureClick]);
