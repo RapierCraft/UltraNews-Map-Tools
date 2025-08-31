@@ -583,11 +583,18 @@ export default function BasicMap({
         />
       )}
 
-      {/* Instructions */}
+      {/* UltraMaps Branding */}
       <Card className="absolute bottom-4 left-4 z-[1000] px-3 py-2 bg-white/90 dark:bg-gray-800/90 backdrop-blur">
-        <p className="text-xs text-gray-600 dark:text-gray-400">
-          3D Globe Mode • Interactive 3D terrain • Click POIs for info • Search to explore
-        </p>
+        <div className="flex items-center gap-2">
+          <img 
+            src="/ultramaps-logo.png" 
+            alt="UltraMaps" 
+            className="w-6 h-6"
+          />
+          <span className="text-sm font-geist-sans font-medium text-gray-800 dark:text-gray-200">
+            UltraMaps
+          </span>
+        </div>
       </Card>
     </div>
   );

@@ -11,7 +11,7 @@ import BorderOverlay from './BorderOverlay';
 import ProperNewsOverlay from './ProperNewsOverlay';
 import LeafletCompassControl from './LeafletCompassControl';
 import TrafficRouteOverlay from './TrafficRouteOverlay';
-import ZoomAwareClickHandler from './ZoomAwareClickHandler';
+import VectorFeatureClickHandler from './VectorFeatureClickHandler';
 import ZoomAwareInfoPanel from './ZoomAwareInfoPanel';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -204,8 +204,24 @@ export default function MapContainer({
     setIsMounted(true);
   }, []);
 
-  const handleLocationClick = (info: any) => {
-    setClickInfo(info);
+  const handleFeatureClick = (feature: any, zoom: number) => {
+    const clickInfo = {
+      lat: parseFloat(feature.lat) || 0,
+      lon: parseFloat(feature.lon) || 0,
+      zoom,
+      type: getLocationTypeByZoom(zoom),
+      data: feature
+    };
+    setClickInfo(clickInfo);
+  };
+
+  const getLocationTypeByZoom = (zoom: number): string => {
+    if (zoom <= 5) return 'country';
+    if (zoom <= 7) return 'state';
+    if (zoom <= 11) return 'city';
+    if (zoom <= 14) return 'district';
+    if (zoom <= 17) return 'building';
+    return 'poi';
   };
 
   const handleCloseInfoPanel = () => {
@@ -291,9 +307,9 @@ export default function MapContainer({
           />
         )}
         
-        {/* Zoom-aware click handler */}
+        {/* Vector feature click handler */}
         {enableZoomAwareInfo && (
-          <ZoomAwareClickHandler onLocationClick={handleLocationClick} />
+          <VectorFeatureClickHandler onFeatureClick={handleFeatureClick} />
         )}
         
         {/* Markers on top */}
