@@ -185,10 +185,12 @@ export default function SimpleVectorGlobe({
       const centerTileX = Math.floor((longitude + 180) / 360 * Math.pow(2, zoomLevel));
       const centerTileY = Math.floor((1 - Math.log(Math.tan(latitude * Math.PI / 180) + 1 / Math.cos(latitude * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoomLevel));
       
-      // Load 3x3 grid around camera center
+      // Dynamic tile loading based on zoom level for Google Maps-style performance
+      const tileRadius = currentZoomLevel >= 15 ? 1 : currentZoomLevel >= 12 ? 2 : 3;
       const tilesToLoad = [];
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
+      
+      for (let dx = -tileRadius; dx <= tileRadius; dx++) {
+        for (let dy = -tileRadius; dy <= tileRadius; dy++) {
           tilesToLoad.push([centerTileX + dx, centerTileY + dy]);
         }
       }
@@ -238,38 +240,42 @@ export default function SimpleVectorGlobe({
             
             console.log(`🏢 Processing ${buildingData.features.length} buildings from tile ${tileKey}`);
             
-            // Create individual entities - much more reliable than primitives
-            const entities: any[] = [];
+            // PROPER Google Maps-style rendering using Cesium Primitives (NOT individual entities)
+            const buildings = buildingData.features;
+            const primitives: any[] = [];
             
-            // Render ALL buildings - no artificial limits
-            const buildings = buildingData.features; // Show every building available
+            // Create batched geometry instances for massive performance boost
+            const geometryInstances: any[] = [];
             
             buildings.forEach((feature: any, i: number) => {
               if (feature.geometry?.type === 'Polygon' && feature.geometry.coordinates?.[0]) {
                 try {
                   const coords = feature.geometry.coordinates[0];
-                  const positions = coords.map((coord: number[]) => 
-                    window.Cesium.Cartesian3.fromDegrees(coord[0], coord[1])
+                  const polygonHierarchy = new window.Cesium.PolygonHierarchy(
+                    coords.map((coord: number[]) => 
+                      window.Cesium.Cartesian3.fromDegrees(coord[0], coord[1])
+                    )
                   );
                   
-                  const height = Math.max(feature.properties?.height || 20, 15); // Taller buildings
+                  const height = Math.max(feature.properties?.height || 20, 15);
                   
-                  const entity = viewer.entities.add({
-                    name: `Building-${tileKey}-${i}`,
-                    polygon: {
-                      hierarchy: positions,
+                  // Create geometry instance (much more efficient than entities)
+                  const geometryInstance = new window.Cesium.GeometryInstance({
+                    geometry: new window.Cesium.PolygonGeometry({
+                      polygonHierarchy: polygonHierarchy,
                       height: 0,
                       extrudedHeight: height,
-                      material: window.Cesium.Color.DARKGRAY,
-                      outline: true,
-                      outlineColor: window.Cesium.Color.BLACK,
-                      show: buildingsRef.current?.show || false, // Respect current building visibility state
-                      heightReference: window.Cesium.HeightReference.CLAMP_TO_GROUND,
-                      extrudedHeightReference: window.Cesium.HeightReference.RELATIVE_TO_GROUND
-                    }
+                      vertexFormat: window.Cesium.PerInstanceColorAppearance.VERTEX_FORMAT
+                    }),
+                    attributes: {
+                      color: window.Cesium.ColorGeometryInstanceAttribute.fromColor(
+                        window.Cesium.Color.DARKGRAY.withAlpha(0.8)
+                      )
+                    },
+                    id: `Building-${tileKey}-${i}`
                   });
                   
-                  entities.push(entity);
+                  geometryInstances.push(geometryInstance);
                   
                 } catch (error) {
                   // Skip invalid buildings
@@ -277,9 +283,27 @@ export default function SimpleVectorGlobe({
               }
             });
             
-            // Store entities for this tile
-            buildingsRef.current.entities.set(tileKey, entities);
-            console.log(`🏢 Created ${entities.length} building entities for tile ${tileKey}`);
+            // Create single primitive for ALL buildings in this tile (massive performance boost)
+            if (geometryInstances.length > 0) {
+              const primitive = new window.Cesium.Primitive({
+                geometryInstances: geometryInstances,
+                appearance: new window.Cesium.PerInstanceColorAppearance({
+                  closed: false,
+                  translucent: true
+                }),
+                show: buildingsRef.current?.show || false,
+                asynchronous: true // Non-blocking rendering
+              });
+              
+              viewer.scene.primitives.add(primitive);
+              primitives.push(primitive);
+              
+              console.log(`🏢 Created 1 primitive with ${geometryInstances.length} buildings for tile ${tileKey}`);
+            }
+            
+            // Store primitives instead of entities
+            buildingsRef.current.entities.set(tileKey, primitives);
+            
             
             buildingsRef.current.loadedTiles.add(tileKey);
         }
@@ -304,19 +328,19 @@ export default function SimpleVectorGlobe({
     buildingsRef.current.show = show;
     console.log(`🏢 toggleBuildingVisibility called with show=${show}, total tiles: ${buildingsRef.current.entities?.size || 0}`);
     
-    // Update all building entities
-    let totalEntities = 0;
+    // Update all building primitives (not entities - for performance)
+    let totalPrimitives = 0;
     if (buildingsRef.current.entities) {
-      buildingsRef.current.entities.forEach((entities: any[]) => {
-        totalEntities += entities.length;
-        entities.forEach((entity: any) => {
-          if (entity.polygon) {
-            entity.polygon.show = show;
+      buildingsRef.current.entities.forEach((primitives: any[]) => {
+        totalPrimitives += primitives.length;
+        primitives.forEach((primitive: any) => {
+          if (primitive && primitive.show !== undefined) {
+            primitive.show = show;
           }
         });
       });
     }
-    console.log(`🏢 Updated visibility for ${totalEntities} building entities`);
+    console.log(`🏢 Updated visibility for ${totalPrimitives} building primitives (MUCH faster than entities)`);
   };
 
   // Fetch and display administrative boundaries
@@ -777,7 +801,10 @@ export default function SimpleVectorGlobe({
           fullscreenButton: false,
           vrButton: false,
           infoBox: false,
-          selectionIndicator: false
+          selectionIndicator: false,
+          // Performance optimizations for Google Maps-style rendering
+          requestRenderMode: true, // Only render when scene changes
+          maximumRenderTimeChange: undefined // Allow longer render times for smoother experience
         });
 
         viewerRef.current = viewer;
@@ -797,6 +824,16 @@ export default function SimpleVectorGlobe({
         viewer.scene.moon.show = false; // Remove moon
         viewer.scene.globe.enableLighting = false; // Disable lighting effects
         viewer.scene.globe.dynamicAtmosphereLighting = false; // Disable atmospheric lighting
+        
+        // Google Maps-style performance optimizations
+        viewer.scene.globe.tileCacheSize = 1000; // Increase tile cache for better performance
+        viewer.scene.requestRenderMode = true; // Only render when needed
+        viewer.scene.maximumRenderTimeChange = 2.0; // Allow slightly longer render times
+        viewer.cesiumWidget.targetFrameRate = 60; // Target 60 FPS
+        
+        // Optimize globe rendering for buildings
+        viewer.scene.globe.preloadSiblings = true; // Preload adjacent tiles
+        viewer.scene.globe.preloadAncestors = true; // Preload parent tiles
         
         // Configure water appearance based on theme
         if (currentLayer === 'osm-standard') {
@@ -911,12 +948,12 @@ export default function SimpleVectorGlobe({
               if (shouldShowBuildings) {
                 await loadBuildingsForView(viewer);
                 
-                // Also start pre-loading for seamless experience
+                // Also start pre-loading for seamless experience (smaller radius to reduce load)
                 const position = viewer.camera.positionCartographic;
                 const longitude = window.Cesium.Math.toDegrees(position.longitude);
                 const latitude = window.Cesium.Math.toDegrees(position.latitude);
                 console.log('🏢 Starting initial pre-loading for seamless experience...');
-                preloadBuildingData(latitude, longitude, 4); // Pre-load 9x9 grid initially
+                preloadBuildingData(latitude, longitude, 2); // Pre-load 5x5 grid initially
               }
             }
           }
@@ -931,15 +968,15 @@ export default function SimpleVectorGlobe({
             await loadBuildingsForView(viewer);
           }
           
-          // Pre-load building data for nearby areas for seamless experience
-          if (buildingsRef.current && currentZoomLevel >= 8 && dataLayers.buildings) {
+          // Pre-load building data for nearby areas ONLY if buildings are visible
+          if (buildingsRef.current && buildingsRef.current.show && currentZoomLevel >= 8 && dataLayers.buildings) {
             const position = viewer.camera.positionCartographic;
             const longitude = window.Cesium.Math.toDegrees(position.longitude);
             const latitude = window.Cesium.Math.toDegrees(position.latitude);
             
             // Pre-load buildings in a larger radius for instant access
             console.log('🏢 Pre-loading building data for nearby areas...');
-            preloadBuildingData(latitude, longitude, 5); // Pre-load 11x11 grid around current view
+            preloadBuildingData(latitude, longitude, 3); // Smaller radius to reduce load
           }
         });
 
