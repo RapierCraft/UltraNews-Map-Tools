@@ -41,21 +41,25 @@ export default function ZoomAwareInfoPanel({ clickInfo, onClose }: ZoomAwareInfo
   const [isExpanded, setIsExpanded] = useState(true);
 
   const getIcon = () => {
-    switch (clickInfo.type) {
-      case 'country':
-        return <Globe className="h-5 w-5" />;
-      case 'state':
-        return <Flag className="h-5 w-5" />;
-      case 'city':
-        return <Building2 className="h-5 w-5" />;
-      case 'district':
-        return <Map className="h-5 w-5" />;
-      case 'building':
-        return <Home className="h-5 w-5" />;
-      case 'poi':
-        return <Landmark className="h-5 w-5" />;
-      default:
-        return <MapPin className="h-5 w-5" />;
+    if (!clickInfo.data) return <MapPin className="h-5 w-5" />;
+    
+    const data = clickInfo.data;
+    
+    // Icon based on zoom level and data type
+    if (clickInfo.zoom <= 5) {
+      return <Globe className="h-5 w-5" />;  // Country level
+    } else if (clickInfo.zoom <= 7) {
+      return <Flag className="h-5 w-5" />;   // State level
+    } else if (clickInfo.zoom <= 11) {
+      return <Building2 className="h-5 w-5" />; // City level
+    } else if (clickInfo.zoom <= 14) {
+      return <Map className="h-5 w-5" />;    // District level
+    } else {
+      // For higher zoom, use more specific icons based on OSM class
+      if (data.class === 'highway') return <Navigation className="h-5 w-5" />;
+      if (data.class === 'building') return <Home className="h-5 w-5" />;
+      if (data.class === 'amenity') return <Landmark className="h-5 w-5" />;
+      return <MapPin className="h-5 w-5" />;
     }
   };
 
@@ -65,37 +69,57 @@ export default function ZoomAwareInfoPanel({ clickInfo, onClose }: ZoomAwareInfo
     const data = clickInfo.data;
     const address = data.address || {};
     
-    switch (clickInfo.type) {
-      case 'country':
-        return address.country || data.display_name?.split(',')[0] || 'Country';
-      case 'state':
-        return address.state || address.region || address.province || 'State/Province';
-      case 'city':
-        return address.city || address.town || address.village || address.municipality || 'City';
-      case 'district':
-        return address.suburb || address.district || address.neighbourhood || 'District';
-      case 'building':
-        return address.house_number && address.road 
-          ? `${address.house_number} ${address.road}`
-          : data.name || 'Building';
-      case 'poi':
-        return data.name || address.amenity || address.shop || 'Point of Interest';
-      default:
-        return 'Location';
+    // Use the actual OSM type and class from the response to determine what was clicked
+    const osmType = data.type;
+    const osmClass = data.class;
+    
+    // For very low zoom (country level)
+    if (clickInfo.zoom <= 5) {
+      return address.country || data.display_name?.split(',')[0] || 'Country';
     }
+    
+    // For low zoom (state level)  
+    if (clickInfo.zoom <= 7) {
+      return address.state || address.region || address.province || 
+             address.country || data.display_name?.split(',')[0] || 'Region';
+    }
+    
+    // For medium zoom (city level)
+    if (clickInfo.zoom <= 11) {
+      return address.city || address.town || address.village || address.municipality ||
+             address.county || data.display_name?.split(',')[0] || 'City';
+    }
+    
+    // For higher zoom (district/neighborhood)
+    if (clickInfo.zoom <= 14) {
+      return address.suburb || address.district || address.neighbourhood || 
+             address.city || address.town || data.display_name?.split(',')[0] || 'District';
+    }
+    
+    // For building level
+    if (clickInfo.zoom <= 17) {
+      if (osmClass === 'highway' || osmClass === 'railway') {
+        return data.name || `${osmType} ${osmClass}`.replace('_', ' ');
+      }
+      return address.house_number && address.road 
+        ? `${address.house_number} ${address.road}`
+        : data.name || data.display_name?.split(',')[0] || 'Building';
+    }
+    
+    // For POI level
+    return data.name || address.amenity || address.shop || 
+           data.display_name?.split(',')[0] || 'Point of Interest';
   };
 
   const getZoomLevelInfo = () => {
-    const zoomRanges = {
-      'country': 'Zoom 1-5: Country level view',
-      'state': 'Zoom 6-7: State/Province level view',
-      'city': 'Zoom 8-11: City level view',
-      'district': 'Zoom 12-14: District/Neighborhood level view',
-      'building': 'Zoom 15-17: Building level view',
-      'poi': 'Zoom 18+: Point of Interest level view'
-    };
+    const zoom = Math.floor(clickInfo.zoom);
     
-    return zoomRanges[clickInfo.type];
+    if (zoom <= 5) return `Zoom ${zoom}: Country level view`;
+    if (zoom <= 7) return `Zoom ${zoom}: State/Province level view`;
+    if (zoom <= 11) return `Zoom ${zoom}: City level view`;
+    if (zoom <= 14) return `Zoom ${zoom}: District/Neighborhood level view`;
+    if (zoom <= 17) return `Zoom ${zoom}: Building/Road level view`;
+    return `Zoom ${zoom}: Point of Interest level view`;
   };
 
   const getRelevantInfo = () => {
@@ -105,59 +129,69 @@ export default function ZoomAwareInfoPanel({ clickInfo, onClose }: ZoomAwareInfo
     const address = data.address || {};
     const info: any = {};
     
-    switch (clickInfo.type) {
-      case 'country':
-        info.Country = address.country;
-        info.Continent = address.continent;
-        info['ISO Code'] = address.country_code?.toUpperCase();
-        break;
-      
-      case 'state':
-        info.State = address.state || address.region || address.province;
-        info.Country = address.country;
-        info.Type = data.type?.replace(/_/g, ' ');
-        break;
-      
-      case 'city':
-        info.City = address.city || address.town || address.village;
-        info.State = address.state || address.region;
-        info.Country = address.country;
-        info.County = address.county;
-        info['Postal Code'] = address.postcode;
-        break;
-      
-      case 'district':
-        info.District = address.suburb || address.district || address.neighbourhood;
-        info.City = address.city || address.town;
-        info.State = address.state;
-        info['Postal Code'] = address.postcode;
-        break;
-      
-      case 'building':
+    // Show information based on actual zoom level, not inferred type
+    if (clickInfo.zoom <= 5) {
+      // Country level
+      info.Country = address.country;
+      if (address.continent) info.Continent = address.continent;
+      if (address.country_code) info['ISO Code'] = address.country_code.toUpperCase();
+      if (data.type) info.Type = data.type.replace(/_/g, ' ');
+    } else if (clickInfo.zoom <= 7) {
+      // State/Region level
+      info.Region = address.state || address.region || address.province;
+      info.Country = address.country;
+      if (data.type) info.Type = data.type.replace(/_/g, ' ');
+      if (data.class) info.Class = data.class.replace(/_/g, ' ');
+    } else if (clickInfo.zoom <= 11) {
+      // City level
+      info.City = address.city || address.town || address.village || address.municipality;
+      info.State = address.state || address.region;
+      info.Country = address.country;
+      if (address.county) info.County = address.county;
+      if (address.postcode) info['Postal Code'] = address.postcode;
+      if (data.type) info.Type = data.type.replace(/_/g, ' ');
+    } else if (clickInfo.zoom <= 14) {
+      // District/Neighborhood level
+      info.District = address.suburb || address.district || address.neighbourhood;
+      info.City = address.city || address.town;
+      info.State = address.state;
+      if (address.postcode) info['Postal Code'] = address.postcode;
+      if (data.type) info.Type = data.type.replace(/_/g, ' ');
+    } else if (clickInfo.zoom <= 17) {
+      // Building/Road level
+      if (data.class === 'highway' || data.class === 'railway') {
+        info.Name = data.name;
+        info.Type = `${data.type} ${data.class}`.replace(/_/g, ' ');
+        info.Surface = data.extratags?.surface;
+        info.Lanes = data.extratags?.lanes;
+        info.Maxspeed = data.extratags?.maxspeed;
+      } else {
         info.Address = data.display_name?.split(',')[0];
-        info.Street = address.road;
-        info.Number = address.house_number;
+        if (address.house_number) info['House Number'] = address.house_number;
+        if (address.road) info.Street = address.road;
         info.District = address.suburb || address.neighbourhood;
         info.City = address.city || address.town;
-        info['Postal Code'] = address.postcode;
-        info.Type = data.type?.replace(/_/g, ' ');
-        break;
-      
-      case 'poi':
-        info.Name = data.name;
-        info.Type = data.type?.replace(/_/g, ' ');
-        info.Category = data.category?.replace(/_/g, ' ');
-        info.Address = data.display_name?.split(',').slice(0, 3).join(', ');
-        if (data.extratags) {
-          if (data.extratags.website) info.Website = data.extratags.website;
-          if (data.extratags.phone) info.Phone = data.extratags.phone;
-          if (data.extratags.opening_hours) info['Opening Hours'] = data.extratags.opening_hours;
-        }
-        break;
+        if (address.postcode) info['Postal Code'] = address.postcode;
+        if (data.type) info.Type = data.type.replace(/_/g, ' ');
+      }
+    } else {
+      // POI level
+      info.Name = data.name;
+      if (data.type) info.Type = data.type.replace(/_/g, ' ');
+      if (data.class) info.Category = data.class.replace(/_/g, ' ');
+      info.Address = data.display_name?.split(',').slice(0, 3).join(', ');
+      if (data.extratags) {
+        if (data.extratags.website) info.Website = data.extratags.website;
+        if (data.extratags.phone) info.Phone = data.extratags.phone;
+        if (data.extratags.opening_hours) info['Opening Hours'] = data.extratags.opening_hours;
+        if (data.extratags.cuisine) info.Cuisine = data.extratags.cuisine;
+        if (data.extratags.wheelchair) info.Wheelchair = data.extratags.wheelchair;
+      }
     }
     
     info.Coordinates = `${clickInfo.lat.toFixed(6)}, ${clickInfo.lon.toFixed(6)}`;
     info['Current Zoom'] = Math.floor(clickInfo.zoom);
+    if (data.osm_id) info['OSM ID'] = `${data.osm_type}/${data.osm_id}`;
     
     return info;
   };
@@ -171,8 +205,11 @@ export default function ZoomAwareInfoPanel({ clickInfo, onClose }: ZoomAwareInfo
       try {
         let searchTerm = title;
         
-        if (clickInfo.type === 'country' || clickInfo.type === 'state' || clickInfo.type === 'city') {
-          searchTerm = `${title} ${clickInfo.type}`;
+        // Only add type suffix for broader geographic areas
+        if (clickInfo.zoom <= 11) {
+          if (clickInfo.zoom <= 5) searchTerm = `${title} country`;
+          else if (clickInfo.zoom <= 7) searchTerm = `${title}`;
+          else if (clickInfo.zoom <= 11) searchTerm = `${title} city`;
         }
         
         const data = await WikipediaAPI.getPageSummary(searchTerm);
@@ -185,8 +222,11 @@ export default function ZoomAwareInfoPanel({ clickInfo, onClose }: ZoomAwareInfo
       }
     };
 
-    if (clickInfo.type !== 'building' && clickInfo.type !== 'poi') {
+    // Only fetch Wikipedia for broader areas (country, state, city level)
+    if (clickInfo.zoom <= 11) {
       fetchWikipediaData();
+    } else {
+      setWikiData(null);
     }
   }, [clickInfo]);
 
@@ -282,7 +322,7 @@ export default function ZoomAwareInfoPanel({ clickInfo, onClose }: ZoomAwareInfo
         )}
 
         {/* Wikipedia Content for larger areas */}
-        {wikiData && (clickInfo.type === 'country' || clickInfo.type === 'state' || clickInfo.type === 'city') && (
+        {wikiData && clickInfo.zoom <= 11 && (
           <>
             <Separator />
             <div className="space-y-3">

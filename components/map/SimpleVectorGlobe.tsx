@@ -54,9 +54,6 @@ interface SimpleVectorGlobeProps {
   onHeadingChange?: (heading: number) => void;
   navigationRoute?: NavigationRoute | null;
   showTrafficOverlay?: boolean;
-  transitSettings?: any;
-  transitStops?: GeoJSON.FeatureCollection | null;
-  transitRoutes?: GeoJSON.FeatureCollection | null;
 }
 
 declare global {
@@ -90,9 +87,6 @@ export default function SimpleVectorGlobe({
   onHeadingChange,
   navigationRoute = null,
   showTrafficOverlay = false,
-  transitSettings,
-  transitStops = null,
-  transitRoutes = null
 }: SimpleVectorGlobeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<any>(null);
@@ -538,28 +532,7 @@ export default function SimpleVectorGlobe({
         if (onClick) {
           viewer.cesiumWidget.screenSpaceEventHandler.setInputAction(
             (event: any) => {
-              // First check if a transit entity was clicked
-              const pickedObject = viewer.scene.pick(event.position);
-              if (pickedObject && pickedObject.id && pickedObject.id.id?.startsWith('transit_stop_')) {
-                // Handle transit stop click
-                const stopId = pickedObject.id.id.replace('transit_stop_', '');
-                const position = pickedObject.id.position.getValue(viewer.clock.currentTime);
-                if (position) {
-                  const cartographic = window.Cesium.Cartographic.fromCartesian(position);
-                  const longitude = window.Cesium.Math.toDegrees(cartographic.longitude);
-                  const latitude = window.Cesium.Math.toDegrees(cartographic.latitude);
-                  
-                  console.log('Transit stop clicked:', stopId);
-                  // Call onClick with transit stop information
-                  onClick({
-                    position: { latitude, longitude },
-                    screenPosition: { x: event.position.x, y: event.position.y }
-                  });
-                }
-                return;
-              }
-
-              // Regular click handling for non-transit objects
+              // Handle map clicks
               const pickedPosition = viewer.camera.pickEllipsoid(event.position, viewer.scene.globe.ellipsoid);
               if (pickedPosition) {
                 const cartographic = window.Cesium.Cartographic.fromCartesian(pickedPosition);
@@ -751,163 +724,6 @@ export default function SimpleVectorGlobe({
     }
   }, [navigationRoute]);
 
-  // Handle transit data visualization
-  useEffect(() => {
-    console.log('SimpleVectorGlobe transit effect triggered:', {
-      viewer: !!viewerRef.current,
-      cesium: !!window.Cesium,
-      transitEnabled: transitSettings?.enabled,
-      transitSettings,
-      transitStops: transitStops?.features?.length || 0,
-      transitRoutes: transitRoutes?.features?.length || 0
-    });
-
-    // Always add a test entity to verify Cesium rendering is working
-    if (viewerRef.current && window.Cesium && transitSettings?.enabled) {
-      console.log('Adding test transit entity for debugging...');
-      const viewer = viewerRef.current;
-      
-    }
-
-    if (!viewerRef.current || !window.Cesium || !transitSettings?.enabled) {
-      // Clear existing transit entities when disabled
-      if (viewerRef.current && window.Cesium) {
-        const viewer = viewerRef.current;
-        const transitEntities = viewer.entities.values.filter((entity: any) => 
-          entity.id?.startsWith('transit_')
-        );
-        transitEntities.forEach((entity: any) => viewer.entities.remove(entity));
-      }
-      return;
-    }
-
-    const viewer = viewerRef.current;
-    
-    // Clear existing transit entities
-    const existingTransitEntities = viewer.entities.values.filter((entity: any) => 
-      entity.id?.startsWith('transit_')
-    );
-    existingTransitEntities.forEach((entity: any) => viewer.entities.remove(entity));
-
-    // Add transit stops
-    if (transitStops && transitSettings.showStops) {
-      console.log('Adding transit stops to map:', transitStops.features.length);
-      console.log('Current viewer entities count before adding:', viewer.entities.values.length);
-      
-      let addedCount = 0;
-      let firstStopCoords = null;
-      
-      transitStops.features.forEach((feature: any, index: number) => {
-        if (feature.geometry.type === 'Point') {
-          const [lon, lat] = feature.geometry.coordinates;
-          const props = feature.properties;
-          
-          // Filter out ferry terminals from metro display
-          if (props?.transitType?.toLowerCase()?.includes('ferry')) {
-            return;
-          }
-          
-          console.log(`Adding stop ${index + 1}:`, {
-            name: props.name,
-            coords: [lat, lon],
-            transitType: props.transitType,
-            id: props.id
-          });
-          
-          const entity = viewer.entities.add({
-            id: `transit_stop_${props.id}`,
-            position: window.Cesium.Cartesian3.fromDegrees(lon, lat),
-            point: {
-              pixelSize: 20, // Made even larger
-              color: window.Cesium.Color.RED, // Always red for maximum visibility
-              outlineColor: window.Cesium.Color.WHITE,
-              outlineWidth: 4,
-              heightReference: window.Cesium.HeightReference.CLAMP_TO_GROUND,
-              disableDepthTestDistance: Number.POSITIVE_INFINITY, // Always visible
-              show: true
-            },
-            label: {
-              text: props.name || 'Metro Station',
-              font: '16pt sans-serif',
-              style: window.Cesium.LabelStyle.FILL_AND_OUTLINE,
-              fillColor: window.Cesium.Color.YELLOW,
-              outlineColor: window.Cesium.Color.BLACK,
-              outlineWidth: 2,
-              pixelOffset: new window.Cesium.Cartesian2(0, -50),
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
-              showBackground: true,
-              backgroundColor: window.Cesium.Color.BLACK.withAlpha(0.9),
-              backgroundPadding: new window.Cesium.Cartesian2(10, 7),
-              show: true
-            },
-            show: true
-          });
-          
-          console.log(`Entity added with ID: ${entity.id}, visible: ${entity.show}`);
-          addedCount++;
-        }
-      });
-      
-      console.log(`Finished adding ${addedCount} transit stops`);
-      console.log('Current viewer entities count after adding:', viewer.entities.values.length);
-      
-      // List all transit entities to verify they exist
-      const transitEntities = viewer.entities.values.filter((entity: any) => 
-        entity.id?.startsWith('transit_')
-      );
-      console.log('Transit entities in viewer:', transitEntities.map(e => ({
-        id: e.id,
-        position: e.position,
-        show: e.show
-      })));
-      
-      // Don't automatically fly to stops - let user control camera
-    }
-
-    // Add transit routes (metro lines)
-    if (transitRoutes && transitSettings.showRoutes) {
-      transitRoutes.features.forEach((feature: any) => {
-        if (feature.geometry.type === 'LineString' && feature.geometry.coordinates.length > 1) {
-          const props = feature.properties;
-          const positions = feature.geometry.coordinates.map((coord: number[]) =>
-            window.Cesium.Cartesian3.fromDegrees(coord[0], coord[1])
-          );
-
-          viewer.entities.add({
-            id: `transit_route_${props.id}`,
-            polyline: {
-              positions: positions,
-              width: 4,
-              material: window.Cesium.Color.fromCssColorString(props.color || '#0000FF'),
-              clampToGround: true,
-              zIndex: 100
-            },
-            label: feature.geometry.coordinates.length > 2 ? {
-              text: props.shortName || props.name,
-              position: window.Cesium.Cartesian3.fromDegrees(
-                feature.geometry.coordinates[Math.floor(feature.geometry.coordinates.length / 2)][0],
-                feature.geometry.coordinates[Math.floor(feature.geometry.coordinates.length / 2)][1]
-              ),
-              font: '10pt sans-serif',
-              style: window.Cesium.LabelStyle.FILL_AND_OUTLINE,
-              fillColor: window.Cesium.Color.fromCssColorString(props.textColor || '#FFFFFF'),
-              outlineColor: window.Cesium.Color.BLACK,
-              outlineWidth: 1,
-              pixelOffset: new window.Cesium.Cartesian2(0, -10),
-              scaleByDistance: new window.Cesium.NearFarScalar(1.5e3, 1.0, 1.5e6, 0.0)
-            } : undefined
-          });
-        }
-      });
-    }
-
-    console.log('Transit data rendered:', {
-      stops: transitStops?.features?.length || 0,
-      routes: transitRoutes?.features?.length || 0,
-      enabled: transitSettings?.enabled
-    });
-
-  }, [transitStops, transitRoutes, transitSettings]);
 
   // Handle selectedLocation changes - fetch and display admin boundaries
   useEffect(() => {

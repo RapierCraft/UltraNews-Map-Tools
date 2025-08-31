@@ -42,21 +42,21 @@ const NYC_METRO: MetroNetwork = {
       network: "NYC Subway",
       city: "New York",
       coordinates: [
-        [-73.9857, 40.7589], // Times Square
-        [-73.9857, 40.7549], // 42nd St
-        [-73.9881, 40.7505], // 34th St
-        [-73.9918, 40.7424], // 28th St
-        [-73.9918, 40.7362], // 23rd St
-        [-73.9918, 40.7308], // 18th St
-        [-73.9918, 40.7238], // 14th St
-        [-73.9918, 40.7180], // Christopher St
-        [-73.9918, 40.7144], // Houston St
-        [-73.9918, 40.7073], // Canal St
-        [-73.9918, 40.7033], // Franklin St
-        [-73.9918, 40.6975], // Chambers St
-        [-74.0092, 40.6895], // Cortlandt St
-        [-74.0134, 40.6826], // Rector St
-        [-74.0134, 40.6777] // South Ferry
+        [-73.9857, 40.7589], // Times Square-42nd St
+        [-73.9857, 40.7549], // 50th St
+        [-73.9881, 40.7505], // 59th St-Columbus Circle
+        [-73.9889, 40.7424], // 66th St-Lincoln Center
+        [-73.9889, 40.7362], // 72nd St
+        [-73.9889, 40.7308], // 79th St
+        [-73.9889, 40.7238], // 86th St
+        [-73.9889, 40.7180], // 96th St
+        [-73.9889, 40.7144], // 103rd St
+        [-73.9889, 40.7073], // 110th St-Cathedral Pkwy
+        [-73.9889, 40.7033], // 116th St-Columbia University
+        [-73.9889, 40.6975], // 125th St
+        [-73.9889, 40.6895], // 137th St-City College
+        [-73.9889, 40.6826], // 145th St
+        [-73.9889, 40.6777] // 157th St
       ],
       stations: []
     },
@@ -130,6 +130,92 @@ const NYC_METRO: MetroNetwork = {
   ]
 };
 
+// Paris Metro data based on OSM relations  
+const PARIS_METRO: MetroNetwork = {
+  city: "Paris",
+  country: "France", 
+  bbox: [2.2, 48.8, 2.4, 48.9],
+  lines: [
+    {
+      id: "paris_1",
+      name: "Line 1",
+      color: "#FFCD00",
+      network: "Paris Metro",
+      city: "Paris",
+      coordinates: [
+        [2.2946, 48.8738], // La Défense
+        [2.3018, 48.8738], // Esplanade de La Défense
+        [2.3090, 48.8738], // Pont de Neuilly
+        [2.3162, 48.8738], // Les Sablons
+        [2.3234, 48.8738], // Porte Maillot
+        [2.3306, 48.8738], // Argentine
+        [2.3378, 48.8738], // Charles de Gaulle - Étoile
+        [2.3450, 48.8738], // George V
+        [2.3522, 48.8738], // Franklin D. Roosevelt
+        [2.3594, 48.8738], // Champs-Élysées - Clemenceau
+        [2.3666, 48.8738], // Concorde
+        [2.3738, 48.8738], // Tuileries
+        [2.3810, 48.8738], // Palais-Royal - Musée du Louvre
+        [2.3882, 48.8738], // Louvre - Rivoli
+        [2.3954, 48.8738], // Châtelet
+        [2.4026, 48.8738], // Hôtel de Ville
+        [2.4098, 48.8738]  // Bastille
+      ],
+      stations: []
+    }
+  ],
+  stations: [
+    {
+      id: "chatelet",
+      name: "Châtelet",
+      coordinates: [2.3954, 48.8738],
+      lines: ["paris_1"],
+      interchange: true
+    }
+  ]
+};
+
+// Tokyo Metro data based on OSM relations
+const TOKYO_METRO: MetroNetwork = {
+  city: "Tokyo",
+  country: "Japan",
+  bbox: [139.5, 35.5, 139.9, 35.8],
+  lines: [
+    {
+      id: "tokyo_yamanote",
+      name: "Yamanote Line",
+      color: "#9ACD32",
+      network: "JR East",
+      city: "Tokyo", 
+      coordinates: [
+        [139.7667, 35.6813], // Shimbashi
+        [139.7631, 35.6759], // Yurakucho
+        [139.7668, 35.6813], // Tokyo
+        [139.7740, 35.6813], // Kanda
+        [139.7812, 35.6938], // Akihabara
+        [139.7884, 35.6938], // Okachimachi
+        [139.7956, 35.7197], // Ueno
+        [139.8028, 35.7308], // Uguisudani
+        [139.8100, 35.7419], // Nippori
+        [139.7956, 35.7530], // Nishi-Nippori
+        [139.7884, 35.7641], // Tabata
+        [139.7812, 35.7752], // Komagome
+        [139.7668, 35.7863]  // Sugamo
+      ],
+      stations: []
+    }
+  ],
+  stations: [
+    {
+      id: "tokyo_station",
+      name: "Tokyo Station",
+      coordinates: [139.7668, 35.6813],
+      lines: ["tokyo_yamanote"],
+      interchange: true
+    }
+  ]
+};
+
 // London Underground data based on OSM relations
 const LONDON_METRO: MetroNetwork = {
   city: "London",
@@ -197,6 +283,8 @@ const LONDON_METRO: MetroNetwork = {
 // Global metro networks registry
 const METRO_NETWORKS: MetroNetwork[] = [
   NYC_METRO,
+  PARIS_METRO,
+  TOKYO_METRO,
   LONDON_METRO
 ];
 

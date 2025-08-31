@@ -207,9 +207,9 @@ export default function TransitControls({
   );
 }
 
-// Default transit settings - focused on local metro data
+// Default transit settings - enabled with fixed infinite loop
 export const defaultTransitSettings: TransitSettings = {
-  enabled: true, // Enabled by default - no API calls needed
+  enabled: true, // Re-enabled with infinite loop fix
   showStops: true,
   showRoutes: true,
   showRealtime: false, // Not available with local data

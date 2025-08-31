@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useRef } from 'react';
+import { useCallback, useState, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import LoadingScreen from './LoadingScreen';
 
@@ -17,7 +17,6 @@ import SimpleThemeToggle from '@/components/SimpleThemeToggle';
 import DraggableInfoModal from './DraggableInfoModal';
 import LocationInfoModal from './LocationInfoModal';
 import FullArticleModal from './FullArticleModal';
-import TransitControls, { defaultTransitSettings } from './TransitControls';
 import { Card } from '@/components/ui/card';
 import { MapPin, Navigation, Globe, Map } from 'lucide-react';
 import { 
@@ -27,7 +26,6 @@ import {
   estimateFuelConsumption,
   type ProcessedRouteStep 
 } from '@/lib/routeInstructionProcessor';
-import { useLocalMetro } from '@/hooks/useLocalMetro';
 
 interface Marker {
   id: string;
@@ -127,42 +125,7 @@ export default function BasicMap({
   const [modalSourcePosition, setModalSourcePosition] = useState<{ x: number; y: number } | null>(null);
   const [showFullArticle, setShowFullArticle] = useState(false);
   const [manualLayerSelection, setManualLayerSelection] = useState(false);
-  const [transitSettings, setTransitSettings] = useState(defaultTransitSettings);
 
-  // Calculate map bounds for local metro data
-  const mapBounds = center ? [
-    center[1] - 0.01 * Math.pow(2, 18 - zoom), // minLon
-    center[0] - 0.01 * Math.pow(2, 18 - zoom), // minLat  
-    center[1] + 0.01 * Math.pow(2, 18 - zoom), // maxLon
-    center[0] + 0.01 * Math.pow(2, 18 - zoom)  // maxLat
-  ] as [number, number, number, number] : undefined;
-
-  // Load local metro data (no API calls)
-  const { 
-    lines, 
-    stations, 
-    networks,
-    linesGeoJSON, 
-    stationsGeoJSON, 
-    hasData,
-    loading: transitLoading 
-  } = useLocalMetro({
-    enabled: transitSettings.enabled,
-    bounds: mapBounds
-  });
-
-  // Debug local metro data
-  console.log('BasicMap local metro debug:', {
-    transitEnabled: transitSettings.enabled,
-    mapBounds,
-    zoom,
-    linesCount: lines?.length || 0,
-    stationsCount: stations?.length || 0,
-    networksCount: networks?.length || 0,
-    linesGeoJSON: linesGeoJSON?.features?.length || 0,
-    stationsGeoJSON: stationsGeoJSON?.features?.length || 0,
-    hasData
-  });
 
   // Handle theme change
   const handleThemeChange = useCallback((isDark: boolean) => {
@@ -570,14 +533,6 @@ export default function BasicMap({
         mapHeading={mapHeading}
       />
 
-      {/* Transit Controls */}
-      {!hideControls && (
-        <TransitControls
-          settings={transitSettings}
-          onSettingsChange={setTransitSettings}
-          className="absolute top-24 right-4 z-[1000] w-48"
-        />
-      )}
 
       {/* Vector-Enhanced Cesium Globe */}
       <VectorCesiumWrapper
@@ -597,9 +552,6 @@ export default function BasicMap({
         onHeadingChange={setMapHeading}
         navigationRoute={calculatedRoute}
         showTrafficOverlay={showTrafficOverlay}
-        transitSettings={transitSettings}
-        transitStops={transitSettings.enabled ? stationsGeoJSON : null}
-        transitRoutes={transitSettings.enabled ? linesGeoJSON : null}
       />
 
       {/* Advanced Location Information Modal */}

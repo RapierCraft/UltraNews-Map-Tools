@@ -44,7 +44,7 @@ export function useLocalMetro(options: UseLocalMetroOptions) {
       setStations([]);
       setNetworks([]);
     }
-  }, [options.enabled, options.bounds]);
+  }, [options.enabled, ...(options.bounds || [])]);
 
   // Convert to GeoJSON for map rendering
   const linesGeoJSON = useMemo(() => {
