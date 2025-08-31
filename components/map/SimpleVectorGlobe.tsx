@@ -241,9 +241,8 @@ export default function SimpleVectorGlobe({
             // Create individual entities - much more reliable than primitives
             const entities: any[] = [];
             
-            // Limit to reasonable amount per tile for performance
-            const maxBuildingsPerTile = 100;
-            const buildings = buildingData.features.slice(0, maxBuildingsPerTile);
+            // Render ALL buildings - no artificial limits
+            const buildings = buildingData.features; // Show every building available
             
             buildings.forEach((feature: any, i: number) => {
               if (feature.geometry?.type === 'Polygon' && feature.geometry.coordinates?.[0]) {
