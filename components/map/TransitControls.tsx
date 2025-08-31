@@ -69,7 +69,7 @@ export default function TransitControls({
           >
             <div className="flex items-center gap-2">
               <Train className="w-4 h-4" />
-              <span className="text-sm font-medium">Transit</span>
+              <span className="text-sm font-medium">Metro</span>
               {settings.enabled && (
                 <div className="w-2 h-2 bg-blue-500 rounded-full" />
               )}
@@ -82,7 +82,7 @@ export default function TransitControls({
           {/* Main Transit Toggle */}
           <div className="flex items-center justify-between">
             <Label htmlFor="transit-enabled" className="text-sm">
-              Show Transit
+              Show Metro Systems
             </Label>
             <Switch
               id="transit-enabled"
@@ -99,7 +99,7 @@ export default function TransitControls({
                   <div className="flex items-center gap-2">
                     <MapPin className="w-3 h-3" />
                     <Label htmlFor="show-stops" className="text-xs">
-                      Stops
+                      Metro Stations
                     </Label>
                   </div>
                   <Switch
@@ -110,18 +110,17 @@ export default function TransitControls({
                   />
                 </div>
 
-                {/* Routes temporarily disabled to reduce API load */}
-                <div className="flex items-center justify-between opacity-50">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Route className="w-3 h-3" />
                     <Label htmlFor="show-routes" className="text-xs">
-                      Routes (Coming Soon)
+                      Metro Lines
                     </Label>
                   </div>
                   <Switch
                     id="show-routes"
-                    checked={false}
-                    disabled={true}
+                    checked={settings.showRoutes}
+                    onCheckedChange={(showRoutes) => updateSettings({ showRoutes })}
                     size="sm"
                   />
                 </div>
@@ -143,17 +142,17 @@ export default function TransitControls({
                 </div>
               </div>
 
-              {/* Transit Type Filters */}
+              {/* Metro System Filters */}
               <div className="space-y-2 border-t pt-2">
                 <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                  Transit Types
+                  Metro Systems
                 </Label>
                 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1">
                       <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                      <span>Subway</span>
+                      <span>Metro/Subway</span>
                     </div>
                     <Switch
                       checked={settings.types.subway}
@@ -164,20 +163,8 @@ export default function TransitControls({
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-green-500 rounded-full" />
-                      <span>Bus</span>
-                    </div>
-                    <Switch
-                      checked={settings.types.bus}
-                      onCheckedChange={(enabled) => updateTypes('bus', enabled)}
-                      size="sm"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1">
                       <div className="w-2 h-2 bg-red-500 rounded-full" />
-                      <span>Rail</span>
+                      <span>Regional Rail</span>
                     </div>
                     <Switch
                       checked={settings.types.rail}
@@ -186,26 +173,27 @@ export default function TransitControls({
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
+                  {/* Disabled options for metro focus */}
+                  <div className="flex items-center justify-between opacity-50">
                     <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-cyan-500 rounded-full" />
-                      <span>Ferry</span>
+                      <div className="w-2 h-2 bg-green-500 rounded-full" />
+                      <span>Bus (Future)</span>
                     </div>
                     <Switch
-                      checked={settings.types.ferry}
-                      onCheckedChange={(enabled) => updateTypes('ferry', enabled)}
+                      checked={false}
+                      disabled={true}
                       size="sm"
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between opacity-50">
                     <div className="flex items-center gap-1">
                       <div className="w-2 h-2 bg-orange-500 rounded-full" />
-                      <span>Tram</span>
+                      <span>Tram (Future)</span>
                     </div>
                     <Switch
-                      checked={settings.types.tram}
-                      onCheckedChange={(enabled) => updateTypes('tram', enabled)}
+                      checked={false}
+                      disabled={true}
                       size="sm"
                     />
                   </div>
@@ -219,17 +207,17 @@ export default function TransitControls({
   );
 }
 
-// Default transit settings
+// Default transit settings - focused on local metro data
 export const defaultTransitSettings: TransitSettings = {
-  enabled: false,
+  enabled: true, // Enabled by default - no API calls needed
   showStops: true,
-  showRoutes: false, // Disabled to reduce API load
-  showRealtime: false, // Not available with OSM data
+  showRoutes: true,
+  showRealtime: false, // Not available with local data
   types: {
-    subway: true,
-    bus: true,
-    rail: true,
-    ferry: false, // Less common, disabled by default
-    tram: true
+    subway: true, // Primary focus on metro/subway
+    bus: false, // Not available in local data yet
+    rail: true, // Some metro systems include rail
+    ferry: false, // Not available in local data yet
+    tram: false // Not available in local data yet
   }
 };

@@ -119,18 +119,20 @@ class TransitService {
   }
 
   /**
-   * Actual Overpass API call for stops
+   * Actual Overpass API call for stops (prioritizing metro/subway)
    */
   private async fetchStopsFromOverpass(bounds: BoundingBox, limit: number): Promise<TransitStop[]> {
     try {
-      // Simplified query to reduce server load
+      // Focus on metro/subway stations first, then major rail
       const query = `
         [out:json][timeout:15];
         (
-          node[highway=bus_stop](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
-          node[railway~"^(station|halt|tram_stop)$"](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+          node[railway=station][station~"subway|metro"](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+          node[railway=station][public_transport=station](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+          node[public_transport=station](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+          node[railway=station](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
         );
-        out geom ${Math.min(limit, 200)};
+        out geom ${Math.min(limit, 100)};
       `;
 
       const response = await fetch(OVERPASS_BASE_URL, {
@@ -176,13 +178,105 @@ class TransitService {
   }
 
   /**
-   * Get transit routes for a specific area using OpenStreetMap data
-   * Disabled temporarily to reduce API load
+   * Get metro/subway routes for a specific area using OpenStreetMap data
    */
-  async getRoutesInBounds(bounds: BoundingBox, limit = 50): Promise<TransitRoute[]> {
-    // Disable routes for now to reduce API load
-    console.log('Transit routes disabled to reduce API load');
-    return [];
+  async getRoutesInBounds(bounds: BoundingBox, limit = 20): Promise<TransitRoute[]> {
+    const roundedBounds = {
+      minLat: Math.round(bounds.minLat * 1000) / 1000,
+      minLon: Math.round(bounds.minLon * 1000) / 1000,
+      maxLat: Math.round(bounds.maxLat * 1000) / 1000,
+      maxLon: Math.round(bounds.maxLon * 1000) / 1000
+    };
+    
+    const cacheKey = `routes_${roundedBounds.minLat}_${roundedBounds.minLon}_${roundedBounds.maxLat}_${roundedBounds.maxLon}`;
+    
+    return this.makeRateLimitedRequest(cacheKey, async () => {
+      return this.fetchMetroRoutesFromOverpass(roundedBounds, limit);
+    }) as Promise<TransitRoute[]>;
+  }
+
+  /**
+   * Fetch metro/subway routes from Overpass API
+   */
+  private async fetchMetroRoutesFromOverpass(bounds: BoundingBox, limit: number): Promise<TransitRoute[]> {
+    try {
+      // Focus on metro/subway routes only
+      const query = `
+        [out:json][timeout:20];
+        (
+          relation[type=route][route=subway](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+          relation[type=route][route=train][service=subway](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+          relation[type=route][route=light_rail][service~"subway|metro"](${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon});
+        );
+        out geom ${Math.min(limit, 30)};
+      `;
+
+      const response = await fetch(OVERPASS_BASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query)
+      });
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          console.warn('Overpass API rate limit exceeded for metro routes');
+          return [];
+        }
+        console.error('Metro routes API error:', response.status);
+        return [];
+      }
+
+      const data = await response.json();
+      const routes: TransitRoute[] = (data.elements || [])
+        .slice(0, limit)
+        .map((element: Record<string, unknown>) => {
+          const tags = element.tags as Record<string, string> || {};
+          
+          return {
+            id: `osm_${element.id}`,
+            name: tags.name || tags.ref || 'Metro Line',
+            shortName: tags.ref || tags.route_ref,
+            type: TransitRouteType.SUBWAY,
+            color: this.parseRouteColor(tags.colour) || this.getDefaultColor(TransitRouteType.SUBWAY),
+            textColor: this.parseRouteColor(tags.colour_text) || '#FFFFFF',
+            operator: tags.operator,
+            network: tags.network,
+            geometry: this.extractRouteGeometry(element)
+          };
+        });
+
+      return routes;
+    } catch (error) {
+      console.error('Failed to fetch metro routes:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Parse color from OSM tags (handle various formats)
+   */
+  private parseRouteColor(color?: string): string | undefined {
+    if (!color) return undefined;
+    
+    // Handle hex colors with or without #
+    if (color.match(/^[0-9A-Fa-f]{6}$/)) return `#${color}`;
+    if (color.match(/^#[0-9A-Fa-f]{6}$/)) return color;
+    
+    // Handle common color names
+    const colorMap: Record<string, string> = {
+      'red': '#FF0000',
+      'blue': '#0000FF', 
+      'green': '#00AA00',
+      'yellow': '#FFFF00',
+      'orange': '#FF9900',
+      'purple': '#663399',
+      'brown': '#8B4513',
+      'pink': '#FFC0CB',
+      'gray': '#808080',
+      'grey': '#808080'
+    };
+    
+    return colorMap[color.toLowerCase()] || color;
   }
 
   /**
@@ -199,17 +293,19 @@ class TransitService {
   }
 
   /**
-   * Actual Overpass API call for nearby stops
+   * Actual Overpass API call for nearby stops (prioritizing metro/subway)
    */
   private async fetchNearbyStopsFromOverpass(lat: number, lon: number, radius: number, limit: number): Promise<TransitStop[]> {
     try {
       const query = `
         [out:json][timeout:15];
         (
-          node[highway=bus_stop](around:${radius},${lat},${lon});
-          node[railway~"^(station|halt)$"](around:${radius},${lat},${lon});
+          node[railway=station][station~"subway|metro"](around:${radius},${lat},${lon});
+          node[railway=station][public_transport=station](around:${radius},${lat},${lon});
+          node[public_transport=station](around:${radius},${lat},${lon});
+          node[railway=station](around:${radius},${lat},${lon});
         );
-        out geom ${Math.min(limit, 50)};
+        out geom ${Math.min(limit, 30)};
       `;
 
       const response = await fetch(OVERPASS_BASE_URL, {
@@ -368,17 +464,24 @@ class TransitService {
   }
 
   /**
-   * Determine stop type from OpenStreetMap tags
+   * Determine stop type from OpenStreetMap tags (prioritizing metro identification)
    */
   private getStopTypeFromTags(tags: Record<string, string>): string {
-    if (tags.public_transport === 'stop_position') return 'Stop Position';
-    if (tags.public_transport === 'platform') return 'Platform';
-    if (tags.highway === 'bus_stop') return 'Bus Stop';
+    // Check for metro/subway specific tags first
+    if (tags.station === 'subway' || tags.station === 'metro') return 'Metro Station';
+    if (tags.railway === 'station' && (tags.public_transport === 'station' || tags.subway === 'yes')) return 'Metro Station';
+    if (tags.public_transport === 'station' && tags.railway === 'station') return 'Metro Station';
+    
+    // Other transit types
     if (tags.railway === 'station') return 'Railway Station';
     if (tags.railway === 'halt') return 'Railway Halt';
     if (tags.railway === 'tram_stop') return 'Tram Stop';
+    if (tags.public_transport === 'platform') return 'Platform';
+    if (tags.public_transport === 'stop_position') return 'Stop Position';
+    if (tags.highway === 'bus_stop') return 'Bus Stop';
     if (tags.amenity === 'ferry_terminal') return 'Ferry Terminal';
-    return 'Transit Stop';
+    
+    return 'Transit Station';
   }
 
   /**

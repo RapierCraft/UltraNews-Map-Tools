@@ -327,6 +327,7 @@ export default function LiveMapView({
         boundsToFit={boundsToFit}
         newsStory={currentStory}
         timelinePosition={timelinePosition}
+        enableZoomAwareInfo={true}
         className="w-full h-full"
       />
 

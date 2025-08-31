@@ -27,8 +27,7 @@ import {
   estimateFuelConsumption,
   type ProcessedRouteStep 
 } from '@/lib/routeInstructionProcessor';
-import { useTransitData } from './TransitLayer';
-import type { BoundingBox } from '@/lib/transitService';
+import { useLocalMetro } from '@/hooks/useLocalMetro';
 
 interface Marker {
   id: string;
@@ -130,19 +129,40 @@ export default function BasicMap({
   const [manualLayerSelection, setManualLayerSelection] = useState(false);
   const [transitSettings, setTransitSettings] = useState(defaultTransitSettings);
 
-  // Calculate map bounds for transit data
-  const mapBounds: BoundingBox | undefined = center ? {
-    minLat: center[0] - 0.01 * Math.pow(2, 18 - zoom),
-    maxLat: center[0] + 0.01 * Math.pow(2, 18 - zoom), 
-    minLon: center[1] - 0.01 * Math.pow(2, 18 - zoom),
-    maxLon: center[1] + 0.01 * Math.pow(2, 18 - zoom)
-  } : undefined;
+  // Calculate map bounds for local metro data
+  const mapBounds = center ? [
+    center[1] - 0.01 * Math.pow(2, 18 - zoom), // minLon
+    center[0] - 0.01 * Math.pow(2, 18 - zoom), // minLat  
+    center[1] + 0.01 * Math.pow(2, 18 - zoom), // maxLon
+    center[0] + 0.01 * Math.pow(2, 18 - zoom)  // maxLat
+  ] as [number, number, number, number] : undefined;
 
-  // Load transit data when enabled
-  const { stops, routes, stopsGeoJSON, routesGeoJSON, loading: transitLoading } = useTransitData(
-    transitSettings.enabled ? mapBounds : undefined, 
-    zoom
-  );
+  // Load local metro data (no API calls)
+  const { 
+    lines, 
+    stations, 
+    networks,
+    linesGeoJSON, 
+    stationsGeoJSON, 
+    hasData,
+    loading: transitLoading 
+  } = useLocalMetro({
+    enabled: transitSettings.enabled,
+    bounds: mapBounds
+  });
+
+  // Debug local metro data
+  console.log('BasicMap local metro debug:', {
+    transitEnabled: transitSettings.enabled,
+    mapBounds,
+    zoom,
+    linesCount: lines?.length || 0,
+    stationsCount: stations?.length || 0,
+    networksCount: networks?.length || 0,
+    linesGeoJSON: linesGeoJSON?.features?.length || 0,
+    stationsGeoJSON: stationsGeoJSON?.features?.length || 0,
+    hasData
+  });
 
   // Handle theme change
   const handleThemeChange = useCallback((isDark: boolean) => {
@@ -578,8 +598,8 @@ export default function BasicMap({
         navigationRoute={calculatedRoute}
         showTrafficOverlay={showTrafficOverlay}
         transitSettings={transitSettings}
-        transitStops={transitSettings.enabled ? stopsGeoJSON : null}
-        transitRoutes={transitSettings.enabled ? routesGeoJSON : null}
+        transitStops={transitSettings.enabled ? stationsGeoJSON : null}
+        transitRoutes={transitSettings.enabled ? linesGeoJSON : null}
       />
 
       {/* Advanced Location Information Modal */}

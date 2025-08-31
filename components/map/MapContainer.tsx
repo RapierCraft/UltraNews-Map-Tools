@@ -11,6 +11,8 @@ import BorderOverlay from './BorderOverlay';
 import ProperNewsOverlay from './ProperNewsOverlay';
 import LeafletCompassControl from './LeafletCompassControl';
 import TrafficRouteOverlay from './TrafficRouteOverlay';
+import ZoomAwareClickHandler from './ZoomAwareClickHandler';
+import ZoomAwareInfoPanel from './ZoomAwareInfoPanel';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -76,6 +78,7 @@ interface MapContainerProps {
   timelinePosition?: number;
   navigationRoute?: any;
   showTrafficOverlay?: boolean;
+  enableZoomAwareInfo?: boolean;
 }
 
 const tileLayers: Record<string, { url: string; attribution: string; maxZoom?: number }> = {
@@ -191,13 +194,23 @@ export default function MapContainer({
   newsStory,
   timelinePosition = 100,
   navigationRoute,
-  showTrafficOverlay = false
+  showTrafficOverlay = false,
+  enableZoomAwareInfo = false
 }: MapContainerProps) {
   const [isMounted, setIsMounted] = useState(false);
+  const [clickInfo, setClickInfo] = useState<any>(null);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  const handleLocationClick = (info: any) => {
+    setClickInfo(info);
+  };
+
+  const handleCloseInfoPanel = () => {
+    setClickInfo(null);
+  };
 
   if (!isMounted) {
     return (
@@ -221,69 +234,83 @@ export default function MapContainer({
   }
 
   return (
-    <LeafletMapContainer
-      center={center}
-      zoom={zoom}
-      className={`w-full h-full ${className}`}
-      style={{ ...style }}
-      maxZoom={selectedLayer.maxZoom || 19}
-      minZoom={4}  // Prevent zooming out too far - continent level minimum
-      maxBounds={[[-90, -180], [90, 180]]}  // Limit panning to world bounds
-      maxBoundsViscosity={1.0}  // Strong resistance when hitting bounds
-      zoomControl={false}  // Disable default zoom controls
-    >
-      <MapController center={center} zoom={zoom} boundsToFit={boundsToFit} />
-      <ZoomControl position="topright" />
-      <LeafletCompassControl position="topleft" isDarkTheme={isDarkTheme} />
-      
-      {/* Use filterable tiles for OSM themes, regular tiles for others */}
-      {useOverlaySystem ? (
-        <FilterableOSMTiles 
-          layers={dataLayers} 
-          isDarkTheme={isDarkTheme}
-          tileLayer={tileLayer}
+    <div className={`relative w-full h-full ${className}`} style={style}>
+      <LeafletMapContainer
+        center={center}
+        zoom={zoom}
+        className="w-full h-full"
+        maxZoom={selectedLayer.maxZoom || 19}
+        minZoom={4}  // Prevent zooming out too far - continent level minimum
+        maxBounds={[[-90, -180], [90, 180]]}  // Limit panning to world bounds
+        maxBoundsViscosity={1.0}  // Strong resistance when hitting bounds
+        zoomControl={false}  // Disable default zoom controls
+      >
+        <MapController center={center} zoom={zoom} boundsToFit={boundsToFit} />
+        <ZoomControl position="topright" />
+        <LeafletCompassControl position="topleft" isDarkTheme={isDarkTheme} />
+        
+        {/* Use filterable tiles for OSM themes, regular tiles for others */}
+        {useOverlaySystem ? (
+          <FilterableOSMTiles 
+            layers={dataLayers} 
+            isDarkTheme={isDarkTheme}
+            tileLayer={tileLayer}
+          />
+        ) : (
+          <TileLayer
+            key={`${tileLayer}-regular`}
+            attribution={selectedLayer.attribution}
+            url={selectedLayer.url}
+            maxZoom={selectedLayer.maxZoom || 19}
+            zIndex={1}
+          />
+        )}
+        
+        {/* Border overlay */}
+        <BorderOverlay 
+          location={selectedLocation}
+          enabled={borderSettings.enabled}
+          borderTypes={borderSettings.types}
         />
-      ) : (
-        <TileLayer
-          key={`${tileLayer}-regular`}
-          attribution={selectedLayer.attribution}
-          url={selectedLayer.url}
-          maxZoom={selectedLayer.maxZoom || 19}
-          zIndex={1}
-        />
-      )}
-      
-      {/* Border overlay */}
-      <BorderOverlay 
-        location={selectedLocation}
-        enabled={borderSettings.enabled}
-        borderTypes={borderSettings.types}
-      />
 
-      {/* News Story overlay */}
-      {newsStory && (
-        <ProperNewsOverlay 
-          story={newsStory}
-          enabled={true}
-          timelinePosition={timelinePosition}
-        />
-      )}
+        {/* News Story overlay */}
+        {newsStory && (
+          <ProperNewsOverlay 
+            story={newsStory}
+            enabled={true}
+            timelinePosition={timelinePosition}
+          />
+        )}
 
-      {/* Navigation Route with Traffic overlay */}
-      {showTrafficOverlay && navigationRoute && (
-        <TrafficRouteOverlay 
-          route={navigationRoute}
-          showTrafficColors={true}
-          showWaypoints={true}
+        {/* Navigation Route with Traffic overlay */}
+        {showTrafficOverlay && navigationRoute && (
+          <TrafficRouteOverlay 
+            route={navigationRoute}
+            showTrafficColors={true}
+            showWaypoints={true}
+          />
+        )}
+        
+        {/* Zoom-aware click handler */}
+        {enableZoomAwareInfo && (
+          <ZoomAwareClickHandler onLocationClick={handleLocationClick} />
+        )}
+        
+        {/* Markers on top */}
+        {markers.map((marker) => (
+          <Marker key={marker.id} position={marker.position}>
+            {marker.popup && <Popup>{marker.popup}</Popup>}
+          </Marker>
+        ))}
+      </LeafletMapContainer>
+      
+      {/* Zoom-aware info panel */}
+      {enableZoomAwareInfo && clickInfo && (
+        <ZoomAwareInfoPanel 
+          clickInfo={clickInfo} 
+          onClose={handleCloseInfoPanel} 
         />
       )}
-      
-      {/* Markers on top */}
-      {markers.map((marker) => (
-        <Marker key={marker.id} position={marker.position}>
-          {marker.popup && <Popup>{marker.popup}</Popup>}
-        </Marker>
-      ))}
-    </LeafletMapContainer>
+    </div>
   );
 }

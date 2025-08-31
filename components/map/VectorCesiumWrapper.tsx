@@ -68,6 +68,9 @@ interface VectorCesiumWrapperProps {
   onHeadingChange?: (heading: number) => void;
   navigationRoute?: NavigationRoute | null;
   showTrafficOverlay?: boolean;
+  transitSettings?: any;
+  transitStops?: GeoJSON.FeatureCollection | null;
+  transitRoutes?: GeoJSON.FeatureCollection | null;
 }
 
 export default function VectorCesiumWrapper(props: VectorCesiumWrapperProps) {

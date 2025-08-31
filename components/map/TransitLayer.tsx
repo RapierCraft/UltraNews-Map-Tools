@@ -29,18 +29,28 @@ export default function TransitLayer({
 
   // Load transit data when bounds change (with reduced frequency)
   useEffect(() => {
-    if (!bounds || zoom < 14) return; // Only load at higher zoom levels (14+)
+    if (!bounds || zoom < 10) return; // Temporarily reduced from 14 to 10 for testing
 
     const loadTransitData = async () => {
       setLoading(true);
       setError(null);
       
       try {
-        // Only load stops, skip routes to reduce API load
-        const stopsData = showStops ? await transitService.getStopsInBounds(bounds, 50) : [];
+        console.log('TransitLayer: Loading transit data for bounds:', bounds, 'zoom:', zoom);
+        
+        // Load metro stops and routes
+        const [stopsData, routesData] = await Promise.all([
+          showStops ? transitService.getStopsInBounds(bounds, 50) : Promise.resolve([]),
+          showRoutes ? transitService.getRoutesInBounds(bounds, 20) : Promise.resolve([])
+        ]);
+
+        console.log('TransitLayer: Loaded data:', {
+          stops: stopsData.length,
+          routes: routesData.length
+        });
 
         setStops(stopsData);
-        setRoutes([]); // Disable routes to reduce API calls
+        setRoutes(routesData);
       } catch (err) {
         console.error('Failed to load transit data:', err);
         setError('Failed to load transit data');
@@ -52,14 +62,14 @@ export default function TransitLayer({
     // Debounce API calls - only load after zoom/bounds have stabilized
     const timer = setTimeout(loadTransitData, 1000);
     return () => clearTimeout(timer);
-  }, [bounds, zoom, showStops]);
+  }, [bounds, zoom, showStops, showRoutes]);
 
   // Convert stops and routes to GeoJSON
   const stopsGeoJSON = transitService.stopsToGeoJSON(stops);
   const routesGeoJSON = transitService.routesToGeoJSON(routes);
 
-  if (zoom < 14) {
-    return null; // Don't show transit data at low zoom levels (increased from 12 to 14)
+  if (zoom < 10) {
+    return null; // Don't show transit data at low zoom levels (temporarily lowered for testing)
   }
 
   return (
@@ -94,7 +104,7 @@ export function useTransitData(bounds?: BoundingBox, zoom: number = 14) {
   const [loading, setLoading] = useState(false);
 
   const loadData = useCallback(async () => {
-    if (!bounds || zoom < 14) {
+    if (!bounds || zoom < 10) {
       setStops([]);
       setRoutes([]);
       return;
@@ -102,10 +112,13 @@ export function useTransitData(bounds?: BoundingBox, zoom: number = 14) {
 
     setLoading(true);
     try {
-      // Only load stops to reduce API calls
-      const stopsData = await transitService.getStopsInBounds(bounds, 50);
+      // Load metro stops and routes
+      const [stopsData, routesData] = await Promise.all([
+        transitService.getStopsInBounds(bounds, 50),
+        transitService.getRoutesInBounds(bounds, 20)
+      ]);
       setStops(stopsData);
-      setRoutes([]); // Disable routes
+      setRoutes(routesData);
     } catch (error) {
       console.error('Failed to load transit data:', error);
     } finally {
