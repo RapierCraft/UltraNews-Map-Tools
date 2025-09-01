@@ -11,8 +11,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, MapPin, Phone, Mail } from 'lucide-react';
+import { Loader2, Phone, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const { user } = useAuth();
@@ -103,13 +104,19 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-black via-gray-900 to-gray-800 p-4">
       <Card className="w-full max-w-md shadow-2xl border-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm">
         <CardHeader className="space-y-4 pb-6">
           <div className="flex items-center justify-center mb-2">
-            <div className="flex items-center space-x-2">
-              <MapPin className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent">
+            <div className="flex items-center space-x-3">
+              <Image 
+                src="/ultramaps-logo.png" 
+                alt="UltraMaps Logo" 
+                width={40} 
+                height={40}
+                className="w-10 h-10"
+              />
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent font-sans" style={{ fontFamily: 'var(--font-geist-sans)' }}>
                 UltraMaps
               </h1>
             </div>
