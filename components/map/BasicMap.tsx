@@ -17,6 +17,7 @@ import SimpleThemeToggle from '@/components/SimpleThemeToggle';
 import DraggableInfoModal from './DraggableInfoModal';
 import LocationInfoModal from './LocationInfoModal';
 import FullArticleModal from './FullArticleModal';
+import GeographicChatInterface from './GeographicChatInterface';
 import { Card } from '@/components/ui/card';
 import { MapPin, Navigation, Globe, Map } from 'lucide-react';
 import { 
@@ -1378,6 +1379,24 @@ export default function BasicMap({
           }}
         />
       )}
+
+      {/* Geographic AI Chat Interface */}
+      <GeographicChatInterface
+        onVisualizationRequest={(query, agentType) => {
+          console.log('Visualization requested:', { query, agentType });
+          // Future: integrate with visualization system
+        }}
+        onLocationFocus={(lat, lon, zoom) => {
+          setCenter([lat, lon]);
+          if (zoom) setZoom(zoom);
+        }}
+        currentLocation={selectedLocation ? {
+          lat: selectedLocation.lat,
+          lon: selectedLocation.lon,
+          name: selectedLocation.name
+        } : undefined}
+        cesiumViewer={cesiumViewerRef.current}
+      />
 
       {/* UltraMaps Branding */}
       <div className="absolute bottom-4 left-4 z-[1000] flex items-center gap-3">

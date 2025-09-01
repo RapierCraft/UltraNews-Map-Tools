@@ -20,8 +20,11 @@ import {
   Bot,
   User,
   Mic,
-  MicOff
+  MicOff,
+  Sparkles
 } from 'lucide-react';
+import { enhancedMultiAgentCoordinator } from '@/lib/specializedAgents';
+import { visualizationEngine } from '@/lib/visualizationEngine';
 
 interface ChatMessage {
   id: string;
@@ -47,6 +50,7 @@ interface GeographicChatProps {
   onVisualizationRequest: (query: string, agentType: string) => void;
   onLocationFocus: (lat: number, lon: number, zoom?: number) => void;
   currentLocation?: { lat: number; lon: number; name?: string };
+  cesiumViewer?: any;
   className?: string;
 }
 
@@ -72,6 +76,7 @@ export default function GeographicChatInterface({
   onVisualizationRequest,
   onLocationFocus,
   currentLocation,
+  cesiumViewer,
   className = ''
 }: GeographicChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -159,18 +164,17 @@ export default function GeographicChatInterface({
 
     setMessages(prev => [...prev, processingMessage]);
 
-    // Simulate AI processing with realistic delay
-    setTimeout(() => {
-      // Generate response based on query type
-      const response = generateAgentResponse(text, agentType, currentLocation);
+    try {
+      // Use real multi-agent system
+      const agentResponse = await enhancedMultiAgentCoordinator.processQuery(text, currentLocation);
       
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         type: 'assistant',
-        content: response.content,
+        content: agentResponse.content,
         timestamp: new Date(),
-        agentType: agentType,
-        visualizations: response.visualizations
+        agentType: agentResponse.agentType,
+        visualizations: agentResponse.visualizations
       };
 
       setMessages(prev => {
@@ -178,20 +182,43 @@ export default function GeographicChatInterface({
         return [...filtered, assistantMessage];
       });
 
-      // Trigger visualization if needed
-      if (response.shouldVisualize) {
-        onVisualizationRequest(text, agentType);
+      // Generate visualizations on Cesium globe
+      if (cesiumViewer && agentResponse.visualizations.length > 0) {
+        agentResponse.visualizations.forEach(viz => {
+          const layer = visualizationEngine.generateCesiumLayer(viz, cesiumViewer);
+          if (layer) {
+            visualizationEngine.addLayer(layer);
+          }
+        });
       }
 
-      // Focus location if specified
-      if (response.focusLocation) {
-        onLocationFocus(response.focusLocation.lat, response.focusLocation.lon, response.focusLocation.zoom);
-      }
+      // Trigger additional visualization request
+      onVisualizationRequest(text, agentResponse.agentType);
 
       setIsProcessing(false);
-    }, 2000 + Math.random() * 2000); // 2-4 second realistic processing time
+    } catch (error) {
+      console.error('Agent processing failed:', error);
+      
+      // Fallback to mock response
+      const fallbackResponse = generateAgentResponse(text, agentType, currentLocation);
+      
+      const assistantMessage: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        type: 'assistant',
+        content: fallbackResponse.content,
+        timestamp: new Date(),
+        agentType: agentType,
+        visualizations: fallbackResponse.visualizations
+      };
 
-  }, [inputValue, isProcessing, selectedAgent, currentLocation, onVisualizationRequest, onLocationFocus]);
+      setMessages(prev => {
+        const filtered = prev.filter(msg => msg.id !== processingMessage.id);
+        return [...filtered, assistantMessage];
+      });
+
+      setIsProcessing(false);
+    }
+  }, [inputValue, isProcessing, selectedAgent, currentLocation, cesiumViewer, onVisualizationRequest, onLocationFocus]);
 
   const generateAgentResponse = (query: string, agentType: string, location?: { lat: number; lon: number; name?: string }) => {
     const locationText = location ? `near ${location.name || `${location.lat.toFixed(4)}, ${location.lon.toFixed(4)}`}` : '';
