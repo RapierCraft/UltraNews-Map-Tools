@@ -101,6 +101,7 @@ export default function BasicMap({
   });
   const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [showBuildings, setShowBuildings] = useState(true);
+  const [isExploreMode, setIsExploreMode] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{ 
     lat: number; 
     lon: number; 
@@ -1187,6 +1188,13 @@ export default function BasicMap({
           <div className="flex-1 max-w-md">
             <SearchBar 
               onLocationSelect={handleLocationSelect}
+              exploreMode={isExploreMode}
+              onExploreModeChange={(isExplore) => {
+                setIsExploreMode(isExplore);
+                if (!isExplore) {
+                  // Exit explore mode, reset any explore-specific state
+                }
+              }}
               onRouteRequest={async (origin, destination, mode) => {
               // Calculate route using the backend API
               console.log('Route calculation requested:', { origin, destination, mode });
@@ -1380,23 +1388,25 @@ export default function BasicMap({
         />
       )}
 
-      {/* UltraMaps AI Chat Bar */}
-      <UltraMapsChatBar
-        onVisualizationRequest={(query, agentType) => {
-          console.log('Visualization requested:', { query, agentType });
-          // Future: integrate with visualization system
-        }}
-        onLocationFocus={(lat, lon, zoom) => {
-          setCenter([lat, lon]);
-          if (zoom) setZoom(zoom);
-        }}
-        currentLocation={selectedLocation ? {
-          lat: selectedLocation.lat,
-          lon: selectedLocation.lon,
-          name: selectedLocation.name
-        } : undefined}
-        cesiumViewer={cesiumViewerRef.current}
-      />
+      {/* UltraMaps AI Chat Bar - Only visible in Explore mode */}
+      {isExploreMode && (
+        <UltraMapsChatBar
+          onVisualizationRequest={(query, agentType) => {
+            console.log('Visualization requested:', { query, agentType });
+            // Future: integrate with visualization system
+          }}
+          onLocationFocus={(lat, lon, zoom) => {
+            setCenter([lat, lon]);
+            if (zoom) setZoom(zoom);
+          }}
+          currentLocation={selectedLocation ? {
+            lat: selectedLocation.lat,
+            lon: selectedLocation.lon,
+            name: selectedLocation.name
+          } : undefined}
+          cesiumViewer={cesiumViewerRef.current}
+        />
+      )}
 
       {/* UltraMaps Branding */}
       <div className="absolute bottom-4 left-4 z-[1000] flex items-center gap-3">

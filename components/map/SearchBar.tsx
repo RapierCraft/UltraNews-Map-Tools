@@ -38,6 +38,8 @@ interface SearchBarProps {
   showModeSelector?: boolean;
   navigationMode?: boolean;
   onNavigationModeChange?: (isNavMode: boolean) => void;
+  exploreMode?: boolean;
+  onExploreModeChange?: (isExploreMode: boolean) => void;
 }
 
 // Enhanced in-memory cache for search results  
@@ -151,7 +153,9 @@ export default function SearchBar({
   className = '', 
   showModeSelector = true,
   navigationMode = false,
-  onNavigationModeChange
+  onNavigationModeChange,
+  exploreMode = false,
+  onExploreModeChange
 }: SearchBarProps) {
   const [mounted, setMounted] = useState(false);
   const [query, setQuery] = useState('');
@@ -489,6 +493,7 @@ export default function SearchBar({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (onExploreModeChange) onExploreModeChange(false);
                       router.push('/');
                       setShowDropdown(false);
                     }}
@@ -503,12 +508,29 @@ export default function SearchBar({
                       setIsNavigationMode(true);
                       setShowToField(true);
                       if (onNavigationModeChange) onNavigationModeChange(true);
+                      // Exit explore mode when entering navigation mode
+                      if (onExploreModeChange) onExploreModeChange(false);
                       setShowDropdown(false);
                     }}
                     className="w-full px-3 py-2 text-left flex items-center hover:bg-accent cursor-pointer"
                   >
                     <Navigation className="mr-2 h-4 w-4" />
                     <span>Navigation</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Exit navigation mode when entering explore mode
+                      setIsNavigationMode(false);
+                      setShowToField(false);
+                      if (onNavigationModeChange) onNavigationModeChange(false);
+                      if (onExploreModeChange) onExploreModeChange(true);
+                      setShowDropdown(false);
+                    }}
+                    className="w-full px-3 py-2 text-left flex items-center hover:bg-accent cursor-pointer"
+                  >
+                    <Search className="mr-2 h-4 w-4" />
+                    <span>Explore</span>
                   </button>
                 </div>
               </Card>
@@ -627,7 +649,7 @@ export default function SearchBar({
           </div>
         )}
         {/* Clear/Exit button positioned within the container */}
-        {(query || isNavigationMode) && (
+        {(query || isNavigationMode || exploreMode) && (
           <Button
             size="icon"
             variant="ghost"
@@ -641,12 +663,16 @@ export default function SearchBar({
                 setCurrentField('from');
                 if (onNavigationModeChange) onNavigationModeChange(false);
               }
+              if (exploreMode) {
+                // Exit explore mode
+                if (onExploreModeChange) onExploreModeChange(false);
+              }
               clearSearch();
             }}
             className={`absolute right-1 z-20 transition-all duration-500 ${
               isNavigationMode ? 'top-2 h-6 w-6' : 'top-1 h-8 w-8'
             }`}
-            title={isNavigationMode ? "Exit navigation mode" : "Clear search"}
+            title={isNavigationMode ? "Exit navigation mode" : exploreMode ? "Exit explore mode" : "Clear search"}
           >
             <X className={isNavigationMode ? "h-3 w-3" : "h-4 w-4"} />
           </Button>
