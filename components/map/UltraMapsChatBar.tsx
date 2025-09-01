@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -59,7 +59,7 @@ export default function UltraMapsChatBar({
   const [showSuggestions, setShowSuggestions] = useState(true);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -176,6 +176,11 @@ export default function UltraMapsChatBar({
       const transcript = event.results[0][0].transcript;
       setInputValue(transcript);
       setIsListening(false);
+      // Auto-resize textarea after voice input
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 144)}px`; // 6 lines max
+      }
     };
     recognition.onerror = () => setIsListening(false);
     recognition.onend = () => setIsListening(false);
@@ -199,6 +204,23 @@ export default function UltraMapsChatBar({
     }
   };
 
+  // Auto-resize textarea function
+  const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputValue(e.target.value);
+    
+    // Auto-resize
+    e.target.style.height = 'auto';
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 144)}px`; // 6 lines max (24px per line)
+  }, []);
+
+  // Handle key press for textarea
+  const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  }, [handleSendMessage]);
+
   return (
     <div className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[1000] transition-all duration-300 ease-in-out ${className}`}>
       <div 
@@ -207,39 +229,39 @@ export default function UltraMapsChatBar({
           border border-white/20 dark:border-gray-800/50
           rounded-2xl shadow-2xl
           transition-all duration-300 ease-in-out
-          ${isExpanded ? 'w-[600px] h-[400px]' : 'w-[500px] h-16'}
+          ${isExpanded ? 'w-[700px] h-[450px]' : 'w-[600px]'}
         `}
+        style={{
+          minHeight: isExpanded ? '450px' : 'auto'
+        }}
       >
         {/* Chat Messages - Only visible when expanded */}
         {isExpanded && (
-          <div className="h-[280px] p-4 pb-2">
+          <div className="h-[320px] p-6 pb-2">
             <ScrollArea className="h-full">
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {messages.length === 0 && showSuggestions && (
-                  <div className="text-center space-y-4 py-8">
-                    <div className="flex items-center justify-center gap-3 mb-4">
+                  <div className="text-center space-y-6 py-12">
+                    <div className="flex items-center justify-center mb-6">
                       <Image 
                         src="/ultramaps-logo.png" 
                         alt="UltraMaps" 
-                        width={32} 
-                        height={32}
-                        className="w-8 h-8 opacity-80"
+                        width={48} 
+                        height={48}
+                        className="w-12 h-12 opacity-90"
                       />
-                      <span className="text-white/90 font-medium text-lg tracking-wide">
-                        UltraMaps AI
-                      </span>
                     </div>
-                    <p className="text-white/70 text-sm mb-4">
+                    <p className="text-white/80 text-base mb-6 font-light">
                       Ask me anything about any location
                     </p>
-                    <div className="flex flex-wrap gap-2 justify-center">
+                    <div className="flex flex-wrap gap-3 justify-center max-w-md mx-auto">
                       {SAMPLE_QUERIES.map((query, index) => (
                         <Button
                           key={index}
                           variant="outline"
                           size="sm"
                           onClick={() => handleSampleQuery(query)}
-                          className="text-xs bg-white/10 border-white/20 text-white/80 hover:bg-white/20 hover:text-white"
+                          className="text-sm bg-white/10 border-white/20 text-white/80 hover:bg-white/20 hover:text-white px-4 py-2"
                         >
                           {query}
                         </Button>
@@ -291,74 +313,74 @@ export default function UltraMapsChatBar({
         )}
 
         {/* Input Bar */}
-        <div className={`p-4 ${isExpanded ? 'pt-2' : 'py-3'}`}>
+        <div className={`p-6 ${isExpanded ? 'pt-3' : 'py-4'}`}>
           {/* Current Location Display */}
           {currentLocation && isExpanded && (
-            <div className="mb-3 text-xs bg-white/10 text-white/70 p-2 rounded-lg border border-white/10">
+            <div className="mb-4 text-sm bg-white/10 text-white/70 p-3 rounded-xl border border-white/10">
               📍 {currentLocation.name || `${currentLocation.lat.toFixed(4)}, ${currentLocation.lon.toFixed(4)}`}
             </div>
           )}
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-end gap-4">
             {/* UltraMaps Logo - Always visible */}
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center justify-center flex-shrink-0 mb-2">
               <Image 
                 src="/ultramaps-logo.png" 
                 alt="UltraMaps" 
-                width={24} 
-                height={24}
-                className="w-6 h-6 opacity-90"
+                width={28} 
+                height={28}
+                className="w-7 h-7 opacity-90"
               />
-              {!isExpanded && (
-                <span className="text-white/90 font-medium text-sm tracking-wide">
-                  UltraMaps AI
-                </span>
-              )}
             </div>
 
-            {/* Input Field */}
+            {/* Input Field with integrated mic */}
             <div className="flex-1 relative">
-              <Input
-                ref={inputRef}
+              <Textarea
+                ref={textareaRef}
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                onChange={handleTextareaChange}
+                onKeyPress={handleKeyPress}
                 placeholder={isExpanded ? "Ask anything about any location..." : "Ask me about this location..."}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                 disabled={isProcessing}
+                rows={1}
                 className="
                   bg-white/10 border-white/20 text-white placeholder:text-white/50
                   focus:bg-white/20 focus:border-white/40 focus:ring-0
-                  rounded-xl h-10
+                  rounded-xl min-h-[48px] max-h-36 resize-none
+                  pr-12 py-3 px-4
                 "
+                style={{
+                  lineHeight: '24px'
+                }}
               />
+              
+              {/* Integrated Voice Input Button */}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={toggleVoiceInput}
+                disabled={isProcessing}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 p-0 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white"
+              >
+                {isListening ? (
+                  <MicOff className="h-4 w-4 text-red-400" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </Button>
             </div>
-            
-            {/* Voice Input Button */}
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={toggleVoiceInput}
-              disabled={isProcessing}
-              className="w-10 h-10 p-0 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white"
-            >
-              {isListening ? (
-                <MicOff className="h-4 w-4 text-red-400" />
-              ) : (
-                <Mic className="h-4 w-4" />
-              )}
-            </Button>
 
             {/* Send Button */}
             <Button
               size="sm"
               onClick={() => handleSendMessage()}
               disabled={!inputValue.trim() || isProcessing}
-              className="w-10 h-10 p-0 rounded-xl bg-blue-500/80 hover:bg-blue-500 text-white disabled:opacity-50"
+              className="w-12 h-12 p-0 rounded-xl bg-blue-500/80 hover:bg-blue-500 text-white disabled:opacity-50 flex-shrink-0 mb-0"
             >
               {isProcessing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                <Send className="h-4 w-4" />
+                <Send className="h-5 w-5" />
               )}
             </Button>
 
@@ -367,21 +389,21 @@ export default function UltraMapsChatBar({
               size="sm"
               variant="ghost"
               onClick={() => setIsExpanded(!isExpanded)}
-              className="w-10 h-10 p-0 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white"
+              className="w-12 h-12 p-0 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white flex-shrink-0 mb-0"
             >
               {isExpanded ? (
-                <Minimize2 className="h-4 w-4" />
+                <Minimize2 className="h-5 w-5" />
               ) : (
-                <Maximize2 className="h-4 w-4" />
+                <Maximize2 className="h-5 w-5" />
               )}
             </Button>
           </div>
 
           {/* Processing Indicator */}
           {isProcessing && (
-            <div className="mt-3 flex items-center gap-2 text-white/70 text-sm">
+            <div className="mt-4 flex items-center gap-3 text-white/70 text-sm ml-11">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>UltraMaps AI is analyzing...</span>
+              <span>Analyzing your request...</span>
             </div>
           )}
         </div>
