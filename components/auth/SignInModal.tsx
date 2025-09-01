@@ -217,7 +217,7 @@ export default function SignInModal({ children, open, onOpenChange }: SignInModa
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
       
-      <DialogContent className="max-w-md p-0 gap-0 bg-white/95 dark:bg-black/95 backdrop-blur-xl border-0 shadow-2xl rounded-none">
+      <DialogContent className="max-w-md p-0 gap-0 bg-white/95 dark:bg-black/95 backdrop-blur-xl border-0 shadow-2xl rounded-none font-mono">
         <div className="relative">
           {/* Header with logo */}
           <div className="p-8 text-center border-b border-neutral-200 dark:border-neutral-800">
@@ -229,15 +229,15 @@ export default function SignInModal({ children, open, onOpenChange }: SignInModa
                 height={32}
                 className="w-8 h-8"
               />
-              <h1 className="text-xl font-light tracking-tight" style={{ fontFamily: 'var(--font-geist-mono)' }}>
+              <h1 className="text-xl font-medium tracking-wide">
                 UltraMaps
               </h1>
             </div>
-            <h2 className="text-2xl font-extralight text-neutral-900 dark:text-white">
-              {isSignUp ? 'Create Account' : 'Welcome Back'}
+            <h2 className="text-2xl font-medium text-neutral-900 dark:text-white tracking-wide">
+              {isSignUp ? 'CREATE ACCOUNT' : 'WELCOME BACK'}
             </h2>
-            <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-2">
-              {isSignUp ? 'Join the next-generation mapping platform' : 'Sign in to continue your journey'}
+            <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-2 tracking-wider uppercase">
+              {isSignUp ? 'JOIN THE NEXT-GENERATION MAPPING PLATFORM' : 'SIGN IN TO CONTINUE YOUR JOURNEY'}
             </p>
           </div>
 
@@ -258,7 +258,7 @@ export default function SignInModal({ children, open, onOpenChange }: SignInModa
           {/* Auth forms */}
           <div className="p-8">
             <Tabs defaultValue="email" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 bg-neutral-100 dark:bg-neutral-900 h-11 rounded-none">
+              <TabsList className="grid w-full grid-cols-2 bg-neutral-100 dark:bg-neutral-900 h-12 rounded-none">
                 <TabsTrigger 
                   value="email" 
                   className="data-[state=active]:bg-white dark:data-[state=active]:bg-black rounded-none font-mono text-xs tracking-wider uppercase"
@@ -287,7 +287,7 @@ export default function SignInModal({ children, open, onOpenChange }: SignInModa
                         {...emailForm.register('name' as any)}
                         id="name"
                         placeholder="John Doe"
-                        className="h-12 rounded-none border-0 border-b border-neutral-300 dark:border-neutral-700 focus:border-black dark:focus:border-white bg-transparent focus:ring-0"
+                        className="h-12 rounded-none border-0 border-b-2 border-neutral-300 dark:border-neutral-700 focus:border-black dark:focus:border-white bg-transparent focus:ring-0 font-mono text-sm"
                       />
                     </div>
                   )}
@@ -347,7 +347,7 @@ export default function SignInModal({ children, open, onOpenChange }: SignInModa
                         id="confirmPassword"
                         type="password"
                         placeholder="Confirm password"
-                        className="h-12 rounded-none border-0 border-b border-neutral-300 dark:border-neutral-700 focus:border-black dark:focus:border-white bg-transparent focus:ring-0"
+                        className="h-12 rounded-none border-0 border-b-2 border-neutral-300 dark:border-neutral-700 focus:border-black dark:focus:border-white bg-transparent focus:ring-0 font-mono text-sm"
                       />
                       {emailForm.formState.errors.confirmPassword && (
                         <p className="text-xs text-red-600 dark:text-red-400 mt-1">
@@ -384,7 +384,7 @@ export default function SignInModal({ children, open, onOpenChange }: SignInModa
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full h-12 bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 rounded-none font-mono text-xs tracking-widest uppercase transition-all duration-300 border-0 group mt-6"
+                    className="w-full h-12 bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 rounded-none font-mono text-xs tracking-widest uppercase font-medium transition-all duration-300 border-0 group mt-6"
                   >
                     {loading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -428,7 +428,7 @@ export default function SignInModal({ children, open, onOpenChange }: SignInModa
                     <Button
                       type="submit"
                       disabled={loading || !phoneValue}
-                      className="w-full h-12 bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 rounded-none font-mono text-xs tracking-widest uppercase transition-all duration-300 border-0 group mt-6"
+                      className="w-full h-12 bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 rounded-none font-mono text-xs tracking-widest uppercase font-medium transition-all duration-300 border-0 group mt-6"
                     >
                       {loading ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -533,7 +533,7 @@ export default function SignInModal({ children, open, onOpenChange }: SignInModa
               onClick={handleGoogleSignIn}
               disabled={loading}
               variant="outline"
-              className="w-full h-12 border-2 border-neutral-300 dark:border-neutral-700 hover:border-black dark:hover:border-white rounded-none font-mono text-xs tracking-widest uppercase transition-all duration-300 group"
+              className="w-full h-12 border-2 border-neutral-300 dark:border-neutral-700 hover:border-black dark:hover:border-white rounded-none font-mono text-xs tracking-widest uppercase font-medium transition-all duration-300 group"
             >
               {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -557,7 +557,7 @@ export default function SignInModal({ children, open, onOpenChange }: SignInModa
                       d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                     />
                   </svg>
-                  <span>Continue with Google</span>
+                  <span>CONTINUE WITH GOOGLE</span>
                   <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
                 </div>
               )}
@@ -576,10 +576,11 @@ export default function SignInModal({ children, open, onOpenChange }: SignInModa
           .phone-input-container .PhoneInputInput {
             height: 48px;
             border: none;
-            border-bottom: 1px solid rgb(212 212 212);
+            border-bottom: 2px solid rgb(212 212 212);
+            font-family: var(--font-geist-mono);
+            font-size: 14px;
             border-radius: 0;
             background: transparent;
-            font-size: 16px;
             padding: 0 12px;
             outline: none;
           }
@@ -600,7 +601,7 @@ export default function SignInModal({ children, open, onOpenChange }: SignInModa
           .phone-input-container .PhoneInputCountrySelect {
             border: none;
             background: transparent;
-            font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-family: var(--font-geist-mono);
             font-size: 12px;
             letter-spacing: 0.05em;
           }

@@ -16,7 +16,6 @@ import {
   Minimize2,
   Maximize2
 } from 'lucide-react';
-import { enhancedMultiAgentCoordinator } from '@/lib/specializedAgents';
 import { visualizationEngine } from '@/lib/visualizationEngine';
 import Image from 'next/image';
 
@@ -104,8 +103,23 @@ export default function UltraMapsChatBar({
     }
 
     try {
-      // Use real multi-agent system
-      const agentResponse = await enhancedMultiAgentCoordinator.processQuery(text, currentLocation);
+      // Use real LLM API
+      const response = await fetch('/api/ai/geographic-query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: text,
+          location: currentLocation
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.statusText}`);
+      }
+
+      const agentResponse = await response.json();
       
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
@@ -113,13 +127,13 @@ export default function UltraMapsChatBar({
         content: agentResponse.content,
         timestamp: new Date(),
         agentType: agentResponse.agentType,
-        visualizations: agentResponse.visualizations
+        visualizations: agentResponse.visualizations || []
       };
 
       setMessages(prev => [...prev, assistantMessage]);
 
       // Generate visualizations on Cesium globe
-      if (cesiumViewer && agentResponse.visualizations.length > 0) {
+      if (cesiumViewer && agentResponse.visualizations && agentResponse.visualizations.length > 0) {
         agentResponse.visualizations.forEach(viz => {
           const layer = visualizationEngine.generateCesiumLayer(viz, cesiumViewer);
           if (layer) {
@@ -133,7 +147,7 @@ export default function UltraMapsChatBar({
 
       setIsProcessing(false);
     } catch (error) {
-      console.error('Agent processing failed:', error);
+      console.error('LLM API request failed:', error);
       
       // Simple fallback response
       const fallbackMessage: ChatMessage = {
