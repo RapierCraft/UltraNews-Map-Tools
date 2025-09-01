@@ -33,6 +33,12 @@ export default function LoginPage() {
     try {
       setLoading(true);
       setError('');
+      
+      if (!auth) {
+        setError('Firebase authentication not configured. Please set up your Firebase credentials.');
+        return;
+      }
+      
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       router.push('/dashboard');
@@ -47,6 +53,11 @@ export default function LoginPage() {
     try {
       setLoading(true);
       setError('');
+      
+      if (!auth) {
+        setError('Firebase authentication not configured. Please set up your Firebase credentials.');
+        return;
+      }
       
       if (!window.recaptchaVerifier) {
         window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
@@ -75,6 +86,11 @@ export default function LoginPage() {
     try {
       setLoading(true);
       setError('');
+      
+      if (!auth) {
+        setError('Firebase authentication not configured. Please set up your Firebase credentials.');
+        return;
+      }
       
       const credential = PhoneAuthProvider.credential(verificationId, verificationCode);
       await signInWithCredential(auth, credential);
