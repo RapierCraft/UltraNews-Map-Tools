@@ -178,8 +178,11 @@ export default function CesiumGlobe({
 
   // Initialize Cesium viewer
   useEffect(() => {
+    console.log('Cesium initialization check:', { isLoaded, hasContainer: !!containerRef.current, hasCesium: !!window.Cesium });
+    
     if (!isLoaded || !containerRef.current || !window.Cesium) return;
 
+    console.log('Initializing Cesium viewer...');
     try {
       // Use fast Cesium built-in OSM provider for maximum performance
       const viewer = new window.Cesium.Viewer(containerRef.current, {
@@ -339,7 +342,7 @@ export default function CesiumGlobe({
       });
 
       viewerRef.current = viewer;
-
+      console.log('Cesium viewer initialized successfully');
 
       return () => {
         if (viewerRef.current && !viewerRef.current.isDestroyed()) {
@@ -347,7 +350,7 @@ export default function CesiumGlobe({
         }
       };
     } catch (error) {
-      // Silent Cesium initialization errors
+      console.error('Cesium initialization failed:', error);
     }
   }, [isLoaded, onClick]);
 
@@ -836,7 +839,13 @@ export default function CesiumGlobe({
       <div 
         ref={containerRef}
         className="w-full h-full"
+        style={{ minHeight: '400px', background: '#000' }}
       />
+      {!isLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-white">
+          Loading Cesium Globe...
+        </div>
+      )}
     </div>
   );
 }

@@ -17,7 +17,7 @@ export default auth((req) => {
   )
   
   // Allow public routes and API routes
-  if (isPublicRoute || pathname.startsWith('/api/') || pathname.startsWith('/_next/')) {
+  if (isPublicRoute || pathname.startsWith('/api/') || pathname.startsWith('/_next/') || pathname.startsWith('/cesium/')) {
     return NextResponse.next()
   }
   
