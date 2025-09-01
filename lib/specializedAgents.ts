@@ -1,4 +1,4 @@
-import { BaseAgent, GeographicQuery, AgentResponse, Visualization } from './multiAgentSystem';
+import { BaseAgent, GeographicQuery, AgentResponse, Visualization, MultiAgentCoordinator } from './multiAgentSystem';
 
 export class NewsEventsAgent extends BaseAgent {
   constructor() {
