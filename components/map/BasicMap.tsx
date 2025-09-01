@@ -17,7 +17,7 @@ import SimpleThemeToggle from '@/components/SimpleThemeToggle';
 import DraggableInfoModal from './DraggableInfoModal';
 import LocationInfoModal from './LocationInfoModal';
 import FullArticleModal from './FullArticleModal';
-import GeographicChatInterface from './GeographicChatInterface';
+import UltraMapsChatBar from './UltraMapsChatBar';
 import { Card } from '@/components/ui/card';
 import { MapPin, Navigation, Globe, Map } from 'lucide-react';
 import { 
@@ -1380,8 +1380,8 @@ export default function BasicMap({
         />
       )}
 
-      {/* Geographic AI Chat Interface */}
-      <GeographicChatInterface
+      {/* UltraMaps AI Chat Bar */}
+      <UltraMapsChatBar
         onVisualizationRequest={(query, agentType) => {
           console.log('Visualization requested:', { query, agentType });
           // Future: integrate with visualization system
