@@ -33,6 +33,7 @@
     "cesium": "^1.132.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "firebase": "^12.2.1",
     "geojson-vt": "^4.0.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.541.0",
@@ -43,6 +44,7 @@
     "pbf": "^4.0.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "react-firebase-hooks": "^5.1.1",
     "react-leaflet": "^5.0.0",
     "recharts": "^2.15.4",
     "tailwind-merge": "^3.3.1"

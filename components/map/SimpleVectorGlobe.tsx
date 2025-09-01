@@ -158,21 +158,19 @@ export default function SimpleVectorGlobe({
   };
 
   // Load building data using efficient Cesium primitives
-  const loadBuildingsForView = async (viewer: any) => {
+  const loadBuildingsForView = async (viewer: any, forceReload: boolean = false) => {
     if (!buildingsRef.current || !viewer || !dataLayers.buildings) {
       return;
     }
     
-    if (buildingLoadingRef.current) {
+    if (buildingLoadingRef.current && !forceReload) {
       return;
     }
     
     buildingLoadingRef.current = true;
     
     try {
-      // Buildings will be stored as entities for reliable rendering
-      
-      // Simple approach - use current camera center position
+      // Get current camera position
       const camera = viewer.camera;
       const cartographic = camera.positionCartographic;
       const longitude = window.Cesium.Math.toDegrees(cartographic.longitude);
@@ -185,26 +183,57 @@ export default function SimpleVectorGlobe({
       const centerTileX = Math.floor((longitude + 180) / 360 * Math.pow(2, zoomLevel));
       const centerTileY = Math.floor((1 - Math.log(Math.tan(latitude * Math.PI / 180) + 1 / Math.cos(latitude * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoomLevel));
       
-      // Dynamic tile loading based on zoom level for Google Maps-style performance
+      // Calculate which tiles are currently needed
       const tileRadius = currentZoomLevel >= 15 ? 1 : currentZoomLevel >= 12 ? 2 : 3;
-      const tilesToLoad = [];
+      const neededTiles = new Set<string>();
       
       for (let dx = -tileRadius; dx <= tileRadius; dx++) {
         for (let dy = -tileRadius; dy <= tileRadius; dy++) {
-          tilesToLoad.push([centerTileX + dx, centerTileY + dy]);
+          const tileKey = `${zoomLevel}/${centerTileX + dx}/${centerTileY + dy}`;
+          neededTiles.add(tileKey);
         }
       }
       
-      console.log(`🏢 Loading 3x3 grid around center tile [${centerTileX},${centerTileY}]`);
+      // Only remove distant tiles, keep nearby ones for better performance
+      const currentlyLoaded = Array.from(buildingsRef.current.loadedTiles);
+      const tilesToRemove = currentlyLoaded.filter(tileKey => {
+        if (neededTiles.has(tileKey)) return false;
+        
+        // Calculate distance from center tile
+        const [zStr, xStr, yStr] = tileKey.split('/');
+        const tileX = parseInt(xStr);
+        const tileY = parseInt(yStr);
+        const distance = Math.max(Math.abs(tileX - centerTileX), Math.abs(tileY - centerTileY));
+        
+        // Only remove tiles that are far away (more than 5 tiles from center)
+        return distance > 5;
+      });
       
-      // Load all tiles in 3x3 grid
-      for (const [x, y] of tilesToLoad) {
-        const tileKey = `${zoomLevel}/${x}/${y}`;
-          
-          // Skip if already loaded
-          if (buildingsRef.current.loadedTiles.has(tileKey)) {
-            continue;
-          }
+      for (const tileKey of tilesToRemove) {
+        // Remove primitives for this tile
+        const tilePrimitives = buildingsRef.current.entities.get(tileKey);
+        if (tilePrimitives) {
+          tilePrimitives.forEach((primitive: any) => {
+            viewer.scene.primitives.remove(primitive);
+          });
+          buildingsRef.current.entities.delete(tileKey);
+        }
+        buildingsRef.current.loadedTiles.delete(tileKey);
+        console.log(`🗑️ Removed buildings for tile ${tileKey} (out of view)`);
+      }
+      
+      // Load new tiles that aren't already loaded
+      const tilesToLoad = Array.from(neededTiles).filter(tileKey => 
+        !buildingsRef.current.loadedTiles.has(tileKey)
+      );
+      
+      console.log(`🏢 Loading ${tilesToLoad.length} new tiles around center [${centerTileX},${centerTileY}]`);
+      
+      // Load each new tile
+      for (const tileKey of tilesToLoad) {
+        const [zStr, xStr, yStr] = tileKey.split('/');
+        const x = parseInt(xStr);
+        const y = parseInt(yStr);
           
           let buildingData = null;
           
@@ -228,7 +257,7 @@ export default function SimpleVectorGlobe({
               buildingCacheRef.current.set(tileKey, buildingData);
             } catch (error) {
               console.error(`🏢 Error loading tile ${tileKey}:`, error);
-              buildingCacheRef.current.loadedTiles.add(tileKey);
+              buildingsRef.current.loadedTiles.add(tileKey);
               continue;
             }
           }
@@ -904,9 +933,9 @@ export default function SimpleVectorGlobe({
         console.log('✅ Flat terrain enabled (no 3D elevation)');
 
         // Initialize custom building system
-        if (showBuildings) {
+        if (useVectorTiles) {
           buildingsRef.current = {
-            show: false,
+            show: dataLayers.buildings,
             entities: new Map(), // Track building entities by tile
             loadedTiles: new Set() // Track loaded tiles
           };
@@ -924,6 +953,10 @@ export default function SimpleVectorGlobe({
         // Enable collision detection to prevent going below terrain
         viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
 
+        // Track last loaded position to detect significant movement
+        let lastLoadedPosition = { lat: center[0], lon: center[1] }; // Initialize with center position
+        let lastLoadTime = 0;
+        
         // Add camera movement listener to track zoom, heading, and show/hide buildings
         const updateCameraState = async () => {
           const height = viewer.camera.positionCartographic.height;
@@ -944,14 +977,15 @@ export default function SimpleVectorGlobe({
               toggleBuildingVisibility(shouldShowBuildings);
               console.log(`🏢 Buildings ${shouldShowBuildings ? 'SHOWN' : 'HIDDEN'} at zoom level ${Math.round(zoomLevel * 10) / 10} (buildings layer: ${dataLayers.buildings})`);
               
-              // Load building data when showing for the first time
+              // Load building data when showing (force reload to ensure buildings are visible)
               if (shouldShowBuildings) {
-                await loadBuildingsForView(viewer);
+                await loadBuildingsForView(viewer, true);
                 
                 // Also start pre-loading for seamless experience (smaller radius to reduce load)
                 const position = viewer.camera.positionCartographic;
                 const longitude = window.Cesium.Math.toDegrees(position.longitude);
                 const latitude = window.Cesium.Math.toDegrees(position.latitude);
+                lastLoadedPosition = { lat: latitude, lon: longitude };
                 console.log('🏢 Starting initial pre-loading for seamless experience...');
                 preloadBuildingData(latitude, longitude, 2); // Pre-load 5x5 grid initially
               }
@@ -959,25 +993,70 @@ export default function SimpleVectorGlobe({
           }
         };
 
+        // Load buildings dynamically as camera moves
+        const checkAndLoadBuildings = async () => {
+          // Get current zoom level from camera height
+          const height = viewer.camera.positionCartographic.height;
+          const currentZoom = getZoomFromHeight(height);
+          
+          if (!buildingsRef.current) {
+            console.log('🏢 Check skipped - buildingsRef not initialized');
+            return;
+          }
+          
+          if (!buildingsRef.current.show || currentZoom < 8 || !dataLayers.buildings) {
+            console.log(`🏢 Check skipped - show:${buildingsRef.current.show}, zoom:${currentZoom.toFixed(1)}, layer:${dataLayers.buildings}`);
+            return;
+          }
+          
+          const position = viewer.camera.positionCartographic;
+          const longitude = window.Cesium.Math.toDegrees(position.longitude);
+          const latitude = window.Cesium.Math.toDegrees(position.latitude);
+          
+          // Calculate distance moved in tile units (at zoom 13)
+          const zoomLevel = 13;
+          const tileSize = 360 / Math.pow(2, zoomLevel);
+          const latDiff = Math.abs(latitude - lastLoadedPosition.lat);
+          const lonDiff = Math.abs(longitude - lastLoadedPosition.lon);
+          const tileMoved = Math.max(latDiff / tileSize, lonDiff / tileSize);
+          
+          console.log(`🏢 Movement check: moved ${tileMoved.toFixed(2)} tiles from last position`);
+          
+          // Load new tiles if moved more than 1 tile or after 2 seconds
+          const now = Date.now();
+          if (tileMoved > 1 || (now - lastLoadTime > 2000 && tileMoved > 0.5)) {
+            console.log(`🏢 Camera moved ${tileMoved.toFixed(2)} tiles - loading new buildings`);
+            lastLoadedPosition = { lat: latitude, lon: longitude };
+            lastLoadTime = now;
+            await loadBuildingsForView(viewer);
+            
+            // Pre-load nearby tiles
+            preloadBuildingData(latitude, longitude, 2);
+          }
+        };
+
         viewer.camera.moveEnd.addEventListener(updateCameraState);
         viewer.camera.changed.addEventListener(updateCameraState);
         
-        // Also load buildings when camera stops moving AND pre-load nearby data
-        viewer.camera.moveEnd.addEventListener(async () => {
-          if (buildingsRef.current && buildingsRef.current.show && currentZoomLevel >= 8 && dataLayers.buildings) {
-            await loadBuildingsForView(viewer);
+        // Check for building loading on camera movement end
+        viewer.camera.moveEnd.addEventListener(checkAndLoadBuildings);
+        
+        // Also check periodically during camera movement for smooth loading
+        let moveCheckInterval: any = null;
+        viewer.camera.moveStart.addEventListener(() => {
+          console.log('🏢 Camera movement started - enabling continuous check');
+          if (moveCheckInterval) clearInterval(moveCheckInterval);
+          moveCheckInterval = setInterval(checkAndLoadBuildings, 500); // Check every 500ms during movement
+        });
+        
+        viewer.camera.moveEnd.addEventListener(() => {
+          console.log('🏢 Camera movement ended - stopping continuous check');
+          if (moveCheckInterval) {
+            clearInterval(moveCheckInterval);
+            moveCheckInterval = null;
           }
-          
-          // Pre-load building data for nearby areas ONLY if buildings are visible
-          if (buildingsRef.current && buildingsRef.current.show && currentZoomLevel >= 8 && dataLayers.buildings) {
-            const position = viewer.camera.positionCartographic;
-            const longitude = window.Cesium.Math.toDegrees(position.longitude);
-            const latitude = window.Cesium.Math.toDegrees(position.latitude);
-            
-            // Pre-load buildings in a larger radius for instant access
-            console.log('🏢 Pre-loading building data for nearby areas...');
-            preloadBuildingData(latitude, longitude, 3); // Smaller radius to reduce load
-          }
+          // Also do a final check when movement stops
+          checkAndLoadBuildings();
         });
 
         // Handle double-clicks to open information modal

@@ -33,8 +33,16 @@ export default function FilterableOSMTiles({ layers, isDarkTheme = false, tileLa
     
     logger.debug(`Layers enabled: ${enabledLayers}/${totalLayers}`, layers);
     
-    // Always use free OpenStreetMap servers to avoid rate limits
-    // Apply filtering through CSS instead of switching servers
+    // Use base layers without buildings when buildings are disabled
+    if (!layers.buildings) {
+      if (isDarkTheme) {
+        // Use dark base layer without buildings
+        return 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark_nolabels/{z}/{x}/{y}{r}.png';
+      } else {
+        // Use light base layer without buildings  
+        return 'https://tiles.stadiamaps.com/tiles/osm_bright_nolabels/{z}/{x}/{y}{r}.png';
+      }
+    }
     
     if (!layers.labels) {
       // Use OpenStreetMap.fr which has a no-labels variant
@@ -65,9 +73,7 @@ export default function FilterableOSMTiles({ layers, isDarkTheme = false, tileLa
       filters.push('hue-rotate(30deg)'); // Shift green tones
     }
     
-    if (!layers.buildings) {
-      filters.push('brightness(1.2)'); // Brighten to wash out building details
-    }
+    // Buildings are now handled by base layer selection, no CSS filter needed
     
     if (!layers.roads) {
       filters.push('contrast(0.7)'); // Reduce road contrast
@@ -100,7 +106,10 @@ export default function FilterableOSMTiles({ layers, isDarkTheme = false, tileLa
       <TileLayer
         key={layerKey}
         url={tileUrl}
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        attribution={!layers.buildings 
+          ? '&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }
         maxZoom={19}
         zIndex={1}
         className="filterable-tiles"
