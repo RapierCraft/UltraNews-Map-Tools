@@ -978,7 +978,8 @@ export default function SimpleVectorGlobe({
               console.log(`🏢 Buildings ${shouldShowBuildings ? 'SHOWN' : 'HIDDEN'} at zoom level ${Math.round(zoomLevel * 10) / 10} (buildings layer: ${dataLayers.buildings})`);
               
               // Load building data when showing (force reload to ensure buildings are visible)
-              if (shouldShowBuildings) {
+              // Double-check that both the ref state and layer state agree before loading
+              if (shouldShowBuildings && buildingsRef.current.show && dataLayers.buildings) {
                 await loadBuildingsForView(viewer, true);
                 
                 // Also start pre-loading for seamless experience (smaller radius to reduce load)

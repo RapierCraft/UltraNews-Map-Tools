@@ -44,13 +44,15 @@ interface ModalStackProviderProps {
 export function ModalStackProvider({ children }: ModalStackProviderProps) {
   const [modals, setModals] = useState<ModalStackItem[]>([]);
   const [usedTerms, setUsedTerms] = useState<Set<string>>(new Set());
+  const [modalCounter, setModalCounter] = useState(0);
 
   const openModal = (modal: Omit<ModalStackItem, 'id'>) => {
     // Don't open if term is already open
     if (modal.term && isTermOpen(modal.term)) {
       return;
     }
-    const id = `modal-${Date.now()}-${Math.random()}`;
+    setModalCounter(prev => prev + 1);
+    const id = `modal-${modalCounter + 1}`;
     setModals(prev => [...prev, { ...modal, id }]);
     
     // Mark term as used when modal opens

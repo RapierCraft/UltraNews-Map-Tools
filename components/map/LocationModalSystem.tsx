@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { X, ArrowLeft, Globe, Info, MapPin, Building2, Users } from 'lucide-react';
 import { WikipediaAPI } from '@/lib/wikipedia';
+import { useHydrationSafeId } from '@/hooks/useHydrationSafeId';
 
 interface LocationModalItem {
   id: string;
@@ -45,12 +46,14 @@ interface LocationModalProviderProps {
 export function LocationModalProvider({ children }: LocationModalProviderProps) {
   const [modals, setModals] = useState<LocationModalItem[]>([]);
   const [usedTerms, setUsedTerms] = useState<Set<string>>(new Set());
+  const [modalCounter, setModalCounter] = useState(0);
 
   const openModal = (modal: Omit<LocationModalItem, 'id'>) => {
     if (modal.term && isTermOpen(modal.term)) {
       return;
     }
-    const id = `modal-${Date.now()}-${Math.random()}`;
+    setModalCounter(prev => prev + 1);
+    const id = `modal-${modalCounter + 1}`;
     setModals(prev => [...prev, { ...modal, id }]);
     
     if (modal.term) {

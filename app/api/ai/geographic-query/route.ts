@@ -3,8 +3,12 @@ import { llmService } from '@/lib/llmService';
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🔍 POST request received');
+    
     const body = await request.json();
-    const { query, location } = body;
+    console.log('📝 Request body:', body);
+    
+    const { query, location, advanced = false } = body;
 
     if (!query || typeof query !== 'string') {
       return NextResponse.json(
@@ -16,7 +20,7 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
     
     // Process the query with the LLM service
-    const response = await llmService.processGeographicQuery(query, location);
+    const response = await llmService.processGeographicQuery(query, location, advanced);
     
     const processingTime = Date.now() - startTime;
     

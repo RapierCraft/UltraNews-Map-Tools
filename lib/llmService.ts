@@ -16,30 +16,56 @@ interface GeographicContext {
 export class LLMService {
   private ollamaUrl = 'http://localhost:11434';
   private openRouterUrl = 'https://openrouter.ai/api/v1';
-  private isDev = process.env.NODE_ENV === 'development';
+  private isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
 
   constructor() {
+    console.log('🚀 Initializing LLMService...');
+    console.log('🔧 Environment:', {
+      isDev: this.isDev,
+      nodeEnv: process.env.NODE_ENV,
+      hasOpenRouterKey: !!process.env.OPENROUTER_API_KEY
+    });
+    
     // Validate environment variables
     if (!process.env.OPENROUTER_API_KEY) {
       console.warn('⚠️ OPENROUTER_API_KEY not set - OpenRouter will not work');
     }
+    
+    console.log('✅ LLMService initialized successfully');
   }
 
   private async checkOllamaHealth(): Promise<boolean> {
-    if (!this.isDev) return false;
-    
     try {
+      console.log('🔍 Checking Ollama health at:', this.ollamaUrl);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      
       const response = await fetch(`${this.ollamaUrl}/api/tags`, {
-        timeout: 2000
+        signal: controller.signal,
+        method: 'GET'
       });
-      return response.ok;
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        const data = await response.json();
+        const modelCount = data.models?.length || 0;
+        console.log(`✅ Ollama healthy with ${modelCount} models`);
+        return true;
+      } else {
+        console.log(`❌ Ollama responded with status: ${response.status}`);
+        return false;
+      }
     } catch (error) {
-      console.log('Ollama not available:', error.message);
+      console.log('❌ Ollama not available:', error.message);
       return false;
     }
   }
 
-  private async queryOllama(prompt: string, model = 'llama3.2'): Promise<string> {
+  private async queryOllama(prompt: string, model = 'llama3.2:3b'): Promise<string> {
+    console.log(`🦙 Calling Ollama with model: ${model}`);
+    
     const response = await fetch(`${this.ollamaUrl}/api/generate`, {
       method: 'POST',
       headers: {
@@ -52,16 +78,24 @@ export class LLMService {
         options: {
           temperature: 0.7,
           top_p: 0.9,
-          max_tokens: 500
+          num_predict: 500
         }
       })
     });
 
     if (!response.ok) {
-      throw new Error(`Ollama request failed: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('❌ Ollama request failed:', response.status, errorText);
+      throw new Error(`Ollama request failed: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('✅ Ollama response received, length:', data.response?.length || 0);
+    
+    if (!data.response) {
+      throw new Error('Ollama returned empty response');
+    }
+    
     return data.response;
   }
 
@@ -125,10 +159,59 @@ export class LLMService {
     return 'general';
   }
 
-  private createGeographicPrompt(query: string, location?: GeographicContext): string {
+  private createGeographicPrompt(query: string, location?: GeographicContext, advanced = false): string {
     const locationContext = location 
       ? `\n\nCONTEXT: User is asking about location: ${location.name || `${location.lat}, ${location.lon}`}`
       : '';
+
+    if (advanced) {
+      return `You are UltraMaps Advanced Visualization AI, specialized in creating immersive 3D globe experiences.
+
+QUERY: "${query}"${locationContext}
+
+Create a comprehensive response with detailed markdown that includes:
+
+## **Overview**
+Brief explanation of what will be visualized on the 3D globe.
+
+## **Key Locations** 
+Specific coordinates and what will be shown at each location. Include:
+- Exact latitude/longitude coordinates
+- Building specifications (height, floors, footprint)
+- Historical context and significance
+
+## **Timeline** (if applicable)
+Key moments with specific timestamps:
+- Event sequences with exact times
+- What happens at each moment
+- Visual changes and animations
+
+## **3D Elements**
+Buildings, objects, and animations to be rendered:
+- **Buildings**: Accurate dimensions, historical details
+- **Objects**: Aircraft, vehicles, monuments with specifications
+- **Animations**: Flight paths, movements, explosions, collapses
+
+## **Interactive Features**
+User controls and exploration options:
+- Timeline scrubber controls
+- Camera movement instructions
+- Layer toggles and overlays
+- Split-screen configurations
+
+## **Educational Value**
+What users will learn from this immersive experience.
+
+For historical events like 9/11:
+- Include World Trade Center (417m height, 110 floors each)
+- Pentagon coordinates: 38.8719, -77.0563
+- Flight paths with accurate aircraft models
+- Timeline from 8:46 AM to collapse times
+- Split-screen NYC/Pentagon views
+- Interactive timeline scrubbing
+
+Make your response detailed, technical, and focused on creating an immersive educational experience that manipulates the 3D globe with precision.`;
+    }
 
     return `As UltraMaps AI, a geographic intelligence assistant, respond to this query: "${query}"${locationContext}
 
@@ -141,9 +224,14 @@ Please provide:
 Keep the response under 200 words and focus on being immediately useful to someone exploring geographic information.`;
   }
 
-  async processGeographicQuery(query: string, location?: GeographicContext): Promise<LLMResponse> {
+  async processGeographicQuery(query: string, location?: GeographicContext, advanced = false): Promise<LLMResponse> {
+    console.log('🔍 Processing geographic query:', { query, location, advanced });
+    
     const agentType = this.detectAgentType(query);
-    const prompt = this.createGeographicPrompt(query, location);
+    const prompt = this.createGeographicPrompt(query, location, advanced);
+    
+    console.log('🤖 Generated prompt for agent type:', agentType);
+    console.log('📝 Prompt preview:', prompt.substring(0, 150) + '...');
     
     let content = '';
     let sources = ['Mock Data']; // Default fallback
@@ -151,28 +239,40 @@ Keep the response under 200 words and focus on being immediately useful to someo
     try {
       // Try Ollama first in development
       if (this.isDev) {
+        console.log('🧪 Development mode - checking Ollama...');
         const ollamaAvailable = await this.checkOllamaHealth();
+        console.log('🦙 Ollama available:', ollamaAvailable);
+        
         if (ollamaAvailable) {
           console.log('🦙 Using Ollama for LLM processing');
           content = await this.queryOllama(prompt);
           sources = ['Ollama Local LLM'];
+          console.log('✅ Ollama response received');
         } else {
-          console.log('🌐 Ollama unavailable, using OpenRouter fallback');
+          console.log('🌐 Ollama unavailable, trying OpenRouter fallback');
+          console.log('🔑 OpenRouter API key available:', !!process.env.OPENROUTER_API_KEY);
           content = await this.queryOpenRouter(prompt);
           sources = ['OpenRouter (Fallback)'];
+          console.log('✅ OpenRouter response received');
         }
       } else {
         // Production: Use OpenRouter directly
-        console.log('🌐 Using OpenRouter for LLM processing');
+        console.log('🌐 Production mode - using OpenRouter directly');
+        console.log('🔑 OpenRouter API key available:', !!process.env.OPENROUTER_API_KEY);
         content = await this.queryOpenRouter(prompt);
         sources = ['OpenRouter'];
+        console.log('✅ OpenRouter response received');
       }
     } catch (error) {
-      console.error('LLM processing failed:', error);
+      console.error('❌ LLM processing failed with error:', error);
+      console.error('📊 Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack?.split('\n').slice(0, 3)
+      });
       
-      // Fallback to enhanced mock responses
-      content = this.generateEnhancedMockResponse(query, agentType, location);
-      sources = ['Enhanced Mock Response'];
+      // Re-throw the error instead of falling back to mock
+      throw new Error(`LLM processing failed: ${error.message}`);
     }
 
     return {
@@ -283,5 +383,5 @@ Keep the response under 200 words and focus on being immediately useful to someo
   }
 }
 
-// Singleton instance
+// Singleton instance - Updated for Ollama
 export const llmService = new LLMService();

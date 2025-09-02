@@ -312,6 +312,7 @@ export default function LiveMapView({
         currentLayer={currentLayer}
         isDarkTheme={isDarkTheme}
         borderSettings={borderSettings}
+        dataLayers={dataLayers}
       />
 
       {/* Map */}

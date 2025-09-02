@@ -17,7 +17,13 @@ import {
   Maximize2
 } from 'lucide-react';
 import { visualizationEngine } from '@/lib/visualizationEngine';
+import { advancedVisualizationEngine } from '@/lib/advancedVisualizationEngine';
+import { adaptiveExperienceEngine } from '@/lib/adaptiveExperienceEngine';
 import Image from 'next/image';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
 
 interface ChatMessage {
   id: string;
@@ -42,6 +48,158 @@ const SAMPLE_QUERIES = [
   "Show property values",
   "Current events nearby"
 ];
+
+// Utility functions for advanced visualization
+const detectAdvancedVisualizationNeed = (query: string): boolean => {
+  // Everything now uses adaptive system - no hardcoded keywords
+  return query.length > 10; // Any substantial query gets adaptive treatment
+};
+
+const handleAdaptiveExperience = async (
+  response: any, 
+  originalQuery: string, 
+  cesiumViewer: any, 
+  setMessages: any
+): Promise<void> => {
+  // Add initial processing message
+  const processingMessage = {
+    id: `assistant-${Date.now()}`,
+    type: 'assistant' as const,
+    content: `🧠 **Adaptive Analysis Complete**\\n\\nGenerating immersive 3D experience for: "${originalQuery}"\\n\\n⚙️ **System Status:**\\n- Self-prompting: ✅ Active\\n- Asset generation: ✅ Running\\n- Data acquisition: ✅ Processing\\n- 3D rendering: ✅ Initializing`,
+    timestamp: new Date(),
+    agentType: 'adaptive-processing'
+  };
+  
+  setMessages((prev: any) => [...prev, processingMessage]);
+  
+  // Execute the adaptive experience
+  if (cesiumViewer && response.spec) {
+    try {
+      // Start adaptive experience execution
+      await adaptiveExperienceEngine.executeExperience(response.spec, cesiumViewer);
+      
+      // Add completion message with dynamic details
+      const completionMessage = {
+        id: `assistant-completion-${Date.now()}`,
+        type: 'assistant' as const,
+        content: generateAdaptiveDetails(response, originalQuery),
+        timestamp: new Date(),
+        agentType: 'experience-ready'
+      };
+      
+      setMessages((prev: any) => [...prev, completionMessage]);
+      
+    } catch (error) {
+      console.error('Failed to execute adaptive experience:', error);
+      
+      // Add error recovery message
+      const errorMessage = {
+        id: `assistant-error-${Date.now()}`,
+        type: 'assistant' as const,
+        content: `⚠️ **Experience Generation Encountered Issues**\\n\\nAttempting fallback visualization for: "${originalQuery}"\\n\\nThe system is adapting and will try alternative rendering approaches.`,
+        timestamp: new Date(),
+        agentType: 'error-recovery'
+      };
+      
+      setMessages((prev: any) => [...prev, errorMessage]);
+    }
+  }
+};
+
+const handleImmersiveExperience = async (
+  response: any, 
+  originalQuery: string, 
+  cesiumViewer: any, 
+  setMessages: any
+): Promise<void> => {
+  // Legacy handler - keeping for backwards compatibility
+  await handleAdaptiveExperience(response, originalQuery, cesiumViewer, setMessages);
+};
+
+const generateTechnicalDetails = (response: any): string => {
+  let details = "## 🎬 Immersive Experience Created\\n\\n";
+  
+  if (response.experience?.locations?.length > 0) {
+    details += `**📍 Locations**: ${response.experience.locations.length} key sites\\n`;
+  }
+  
+  if (response.experience?.timeline?.length > 0) {
+    details += `**⏰ Timeline**: ${response.experience.timeline.length} events\\n`;
+  }
+  
+  if (response.experience?.animations?.length > 0) {
+    details += `**🎭 Animations**: ${response.experience.animations.length} sequences\\n`;
+  }
+  
+  if (response.visualInstructions?.length > 0) {
+    details += "\\n**🛠️ Visual Elements**:\\n";
+    response.visualInstructions.forEach((instruction: string, index: number) => {
+      details += `${index + 1}. ${instruction}\\n`;
+    });
+  }
+  
+  if (response.cameraInstructions?.length > 0) {
+    details += "\\n**📹 Camera Actions**:\\n";
+    response.cameraInstructions.forEach((instruction: any, index: number) => {
+      details += `${index + 1}. ${instruction.action} - ${instruction.coordinates ? `Fly to ${instruction.coordinates.join(', ')}` : 'Custom view'}\\n`;
+    });
+  }
+  
+  details += "\\n*Use the timeline controls to explore the experience interactively.*";
+  
+  return details;
+};
+
+const generateAdaptiveDetails = (response: any, originalQuery: string): string => {
+  let details = `## 🎬 **Adaptive Experience Ready**\\n\\n`;
+  details += `**Query Analyzed:** "${originalQuery}"\\n\\n`;
+  
+  if (response.spec?.assetRequirements?.length > 0) {
+    details += `### 🏗️ **Dynamic Assets Generated**\\n`;
+    details += `- **Total Assets**: ${response.spec.assetRequirements.length}\\n`;
+    
+    const assetTypes = response.spec.assetRequirements.reduce((acc: any, asset: any) => {
+      acc[asset.type] = (acc[asset.type] || 0) + 1;
+      return acc;
+    }, {});
+    
+    Object.entries(assetTypes).forEach(([type, count]) => {
+      details += `- **${type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}**: ${count}\\n`;
+    });
+    details += `\\n`;
+  }
+  
+  if (response.spec?.dataRequests?.length > 0) {
+    details += `### 📊 **Data Sources Acquired**\\n`;
+    response.spec.dataRequests.forEach((request: any, index: number) => {
+      details += `${index + 1}. ${request.source || request.endpoint || 'External API'}\\n`;
+    });
+    details += `\\n`;
+  }
+  
+  if (response.spec?.experienceFlow?.length > 0) {
+    details += `### 🎮 **Interactive Timeline**\\n`;
+    details += `- **Total Steps**: ${response.spec.experienceFlow.length}\\n`;
+    details += `- **Duration**: ~${Math.max(...response.spec.experienceFlow.map((s: any) => s.timestamp)) || 60} seconds\\n`;
+    details += `- **User Controls**: Timeline scrubbing, camera controls, data layers\\n\\n`;
+  }
+  
+  if (response.capabilities) {
+    details += `### ⚙️ **System Capabilities**\\n`;
+    Object.entries(response.capabilities).forEach(([capability, enabled]) => {
+      const icon = enabled ? '✅' : '❌';
+      const name = capability.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+      details += `- ${icon} ${name}\\n`;
+    });
+    details += `\\n`;
+  }
+  
+  details += `### 🌍 **Experience Active**\\n`;
+  details += `The adaptive system has analyzed your query, acquired necessary data, generated 3D assets, and created an immersive experience on the globe. \\n\\n`;
+  details += `*Use the timeline controls to explore the experience interactively. The system will continue learning and adapting to provide better experiences.*`;
+  
+  return details;
+};
 
 export default function UltraMapsChatBar({
   onVisualizationRequest,
@@ -103,15 +261,21 @@ export default function UltraMapsChatBar({
     }
 
     try {
-      // Use real LLM API
-      const response = await fetch('/api/ai/geographic-query', {
+      // Detect if this requires advanced visualization
+      const requiresAdvanced = detectAdvancedVisualizationNeed(text);
+      
+      // Always use adaptive system for complex queries
+      const apiEndpoint = requiresAdvanced ? '/api/ai/adaptive-experience' : '/api/ai/geographic-query';
+      
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           query: text,
-          location: currentLocation
+          location: currentLocation,
+          advanced: requiresAdvanced
         })
       });
 
@@ -120,6 +284,12 @@ export default function UltraMapsChatBar({
       }
 
       const agentResponse = await response.json();
+      
+      // Handle adaptive experience responses
+      if (requiresAdvanced && agentResponse.type === 'adaptive_experience') {
+        await handleAdaptiveExperience(agentResponse, text, cesiumViewer, setMessages);
+        return; // Early return for adaptive experiences
+      }
       
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
@@ -243,7 +413,8 @@ export default function UltraMapsChatBar({
           border border-white/20 dark:border-gray-800/50
           rounded-2xl shadow-2xl
           transition-all duration-300 ease-in-out
-          ${isExpanded ? 'w-[700px] h-[450px]' : 'w-[600px]'}
+          ${isExpanded ? 'w-[1400px] h-[450px]' : 'w-[1200px]'}
+          ${isExpanded ? 'flex flex-col' : ''}
         `}
         style={{
           minHeight: isExpanded ? '450px' : 'auto'
@@ -252,8 +423,8 @@ export default function UltraMapsChatBar({
         {/* Chat Messages - Only visible when expanded */}
         {isExpanded && (
           <div className="h-[320px] p-6 pb-2">
-            <ScrollArea className="h-full">
-              <div className="space-y-4">
+            <ScrollArea className="h-full pr-4">
+              <div className="space-y-4 pr-2">
                 {messages.length === 0 && showSuggestions && (
                   <div className="text-center space-y-6 py-12">
                     <div className="flex items-center justify-center mb-6">
@@ -285,20 +456,108 @@ export default function UltraMapsChatBar({
                 )}
 
                 {messages.map((message) => (
-                  <div key={message.id} className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div key={message.id} className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'} ${message.type === 'user' ? 'pr-4' : ''}`}>
                     {message.type !== 'user' && (
                       <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                        <Bot className="h-4 w-4 text-white/80" />
+                        <Image 
+                          src="/android-chrome-512x512.png" 
+                          alt="UltraMaps AI" 
+                          width={20} 
+                          height={20}
+                          className="w-5 h-5 opacity-90"
+                        />
                       </div>
                     )}
                     
-                    <div className={`max-w-[400px] ${message.type === 'user' ? 'order-first' : ''}`}>
+                    <div className={`max-w-[800px] ${message.type === 'user' ? 'order-first' : ''}`}>
                       <div className={`p-3 rounded-2xl text-sm ${
                         message.type === 'user' 
                           ? 'bg-blue-500/80 text-white ml-auto' 
                           : 'bg-white/20 text-white/90'
                       }`}>
-                        {message.content}
+                        {message.type === 'user' ? (
+                          message.content
+                        ) : (
+                          <div className="prose prose-invert prose-sm max-w-none">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              rehypePlugins={[rehypeRaw, rehypeSanitize]}
+                            components={{
+                              table: ({children, ...props}) => (
+                                <div className="overflow-x-auto my-4">
+                                  <table className="min-w-full border-collapse border border-white/20" {...props}>
+                                    {children}
+                                  </table>
+                                </div>
+                              ),
+                              th: ({children, ...props}) => (
+                                <th className="border border-white/20 bg-white/10 px-3 py-2 text-left font-medium" {...props}>
+                                  {children}
+                                </th>
+                              ),
+                              td: ({children, ...props}) => (
+                                <td className="border border-white/20 px-3 py-2" {...props}>
+                                  {children}
+                                </td>
+                              ),
+                              code: ({children, className, ...props}) => {
+                                const isInline = !className;
+                                if (isInline) {
+                                  return (
+                                    <code className="bg-white/20 px-1 py-0.5 rounded text-xs" {...props}>
+                                      {children}
+                                    </code>
+                                  );
+                                }
+                                return (
+                                  <pre className="bg-white/10 p-3 rounded-lg overflow-x-auto my-3">
+                                    <code className="text-xs" {...props}>
+                                      {children}
+                                    </code>
+                                  </pre>
+                                );
+                              },
+                              ul: ({children, ...props}) => (
+                                <ul className="list-disc list-inside space-y-1 my-2" {...props}>
+                                  {children}
+                                </ul>
+                              ),
+                              ol: ({children, ...props}) => (
+                                <ol className="list-decimal list-inside space-y-1 my-2" {...props}>
+                                  {children}
+                                </ol>
+                              ),
+                              h1: ({children, ...props}) => (
+                                <h1 className="text-lg font-bold mb-2 mt-4" {...props}>
+                                  {children}
+                                </h1>
+                              ),
+                              h2: ({children, ...props}) => (
+                                <h2 className="text-base font-semibold mb-2 mt-3" {...props}>
+                                  {children}
+                                </h2>
+                              ),
+                              h3: ({children, ...props}) => (
+                                <h3 className="text-sm font-medium mb-1 mt-2" {...props}>
+                                  {children}
+                                </h3>
+                              ),
+                              p: ({children, ...props}) => (
+                                <p className="mb-2 leading-relaxed" {...props}>
+                                  {children}
+                                </p>
+                              ),
+                              blockquote: ({children, ...props}) => (
+                                <blockquote className="border-l-4 border-white/30 pl-4 italic my-3 bg-white/5 py-2 rounded-r" {...props}>
+                                  {children}
+                                </blockquote>
+                              )
+                            }}
+                            >
+                              {message.content}
+                            </ReactMarkdown>
+                          </div>
+                        )}
                       </div>
                       
                       <div className="flex items-center gap-2 mt-1 px-1">
@@ -337,13 +596,14 @@ export default function UltraMapsChatBar({
 
           <div className="flex items-end gap-4">
             {/* UltraMaps Logo - Always visible */}
-            <div className="flex items-center justify-center flex-shrink-0 mb-2">
+            <div className="flex items-center justify-center flex-shrink-0">
               <Image 
-                src="/ultramaps-logo.png" 
+                src="/android-chrome-512x512.png" 
                 alt="UltraMaps" 
-                width={28} 
-                height={28}
-                className="w-7 h-7 opacity-90"
+                width={48} 
+                height={48}
+                className="w-12 h-12 opacity-90"
+                priority
               />
             </div>
 

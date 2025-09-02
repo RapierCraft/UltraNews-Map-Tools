@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Settings2, Eye, EyeOff } from 'lucide-react';
 import { logger } from '@/lib/logger';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ interface LayerState {
 interface LayerControlsProps {
   onLayerChange?: (layers: LayerState) => void;
   isDarkTheme?: boolean;
+  initialLayers?: LayerState;
 }
 
 const defaultLayers: LayerState = {
@@ -45,9 +46,15 @@ const defaultLayers: LayerState = {
   hillshading: false,
 };
 
-export default function LayerControls({ onLayerChange, isDarkTheme = false }: LayerControlsProps) {
-  const [layers, setLayers] = useState<LayerState>(defaultLayers);
+export default function LayerControls({ onLayerChange, isDarkTheme = false, initialLayers }: LayerControlsProps) {
+  const [layers, setLayers] = useState<LayerState>(initialLayers || defaultLayers);
   const [isOpen, setIsOpen] = useState(false);
+
+  // Sync initial state with parent on mount
+  useEffect(() => {
+    const initialState = initialLayers || defaultLayers;
+    onLayerChange?.(initialState);
+  }, []); // Only run on mount
 
   const handleLayerToggle = (layerName: keyof LayerState) => {
     const newLayers = {

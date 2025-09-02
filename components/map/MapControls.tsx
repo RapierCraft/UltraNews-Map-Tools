@@ -51,6 +51,7 @@ interface MapControlsProps {
   borderSettings?: BorderSettings;
   showBuildings?: boolean;
   mapHeading?: number;
+  dataLayers?: LayerState;
 }
 
 const mapStyles = [
@@ -79,7 +80,8 @@ export default function MapControls({
     }
   },
   showBuildings = true,
-  mapHeading = 0
+  mapHeading = 0,
+  dataLayers
 }: MapControlsProps) {
   const isMapRotated = Math.abs(mapHeading) > 1;
   
@@ -159,6 +161,7 @@ export default function MapControls({
       <LayerControls 
         onLayerChange={onDataLayersChange}
         isDarkTheme={isDarkTheme}
+        initialLayers={dataLayers}
       />
 
       {/* Border Controls */}
